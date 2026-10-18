@@ -373,3 +373,19 @@ def test_gemini_atlanan_model_rapora_yazilir():
     assert "(yedek)" in metin
     assert "ana → kota / istek sınırı doldu (429)" in metin
     assert "ikinci → model bulunamadı (404)" in metin
+
+
+def test_kirpma_kutusu_en_az_boyut_ve_sinirlar():
+    from fotorobot.motor import kirpma_kutusu
+
+    # Küçük maske (ben): en az 256 px kare, maske ortada
+    k = kirpma_kutusu((300, 340, 324, 364), (512, 640), 48, 256)
+    assert k[2] - k[0] == 256 and k[3] - k[1] == 256
+    assert k[0] <= 300 and k[2] >= 324 and k[1] <= 340 and k[3] >= 364
+    # Kenara yakın maske görüntü dışına taşmaz
+    k = kirpma_kutusu((500, 5, 510, 15), (512, 640), 48, 256)
+    assert k[0] >= 0 and k[1] >= 0 and k[2] <= 512 and k[3] <= 640
+    assert k[2] - k[0] == 256
+    # Büyük maske: maske + pay, görüntüden büyük olamaz
+    k = kirpma_kutusu((0, 0, 500, 600), (512, 640), 48, 256)
+    assert k[2] - k[0] == 512 and k[3] - k[1] == 512

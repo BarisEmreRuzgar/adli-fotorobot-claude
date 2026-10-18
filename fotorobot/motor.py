@@ -27,6 +27,8 @@ SAC_MASKE_ORANI = 0.3
 # Aşama 3: maskenin çevresinde bağlam için bırakılan pay ve maske kenar yumuşatması (piksel)
 BOLGE_KENARI = 48
 BOLGE_BULANIKLIGI = 4
+# Aşama 3'te kırpma kutusunun en küçük kenarı (piksel)
+BOLGE_EN_AZ_KUTU = 256
 
 
 def _log(cb, mesaj):
@@ -65,6 +67,23 @@ def token_parcala(ids, ayirici_id, uzunluk):
     return parcalar
 
 
+def kirpma_kutusu(bbox, boyut, pay, en_az):
+    """Maske kutusunun çevresinde, en az `en_az` kenarlı ve görüntü içinde kalan kare kırpma kutusu.
+
+    Küçük maskelerde (ör. tek tıklamalık ben) kırpıntı çok büyütülünce model yüzün
+    neresinde olduğunu anlayamıyor; en az boyut, burun/göz gibi bağlamın kadraja
+    girmesini sağlar.
+    """
+    x0, y0, x1, y1 = bbox
+    g, y = boyut
+    kenar = max(x1 - x0, y1 - y0) + 2 * pay
+    kenar = min(max(kenar, en_az), g, y)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    sol = int(round(min(max(cx - kenar / 2, 0), g - kenar)))
+    ust = int(round(min(max(cy - kenar / 2, 0), y - kenar)))
+    return sol, ust, sol + int(kenar), ust + int(kenar)
+
+
 def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
     """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler."""
     ids, agirliklar = [], []
@@ -88,6 +107,8 @@ class Motor:
         self.pipe = None
         self.pipe_i2i = None
         self.pipe_inp = None
+        self.pipe_cn_inp = None
+        self._cn_denendi = False
         self.yuz_app = None
         self._ip_islemcileri = None
         self._ip_proj = None
@@ -443,13 +464,39 @@ class Motor:
 
     # ── Aşama 3 ────────────────────────────────────────────────────────
 
+    def _cn_inpaint_hazirla(self):
+        """Inpaint ControlNet'li pipeline'ı ilk Aşama 3 kullanımında kurar; olmazsa None."""
+        if self._cn_denendi:
+            return self.pipe_cn_inp
+        self._cn_denendi = True
+        if not self.ayarlar.inpaint_controlnet:
+            return None
+        try:
+            from diffusers import ControlNetModel, StableDiffusionControlNetInpaintPipeline
+
+            print("⏳ Inpaint ControlNet yükleniyor (ilk seferde ~700 MB indirilir)...", flush=True)
+            cn = ControlNetModel.from_pretrained(self.ayarlar.inpaint_controlnet, torch_dtype=self.dtype)
+            pipe = StableDiffusionControlNetInpaintPipeline(**self.pipe.components, controlnet=cn)
+            pipe.set_progress_bar_config(disable=True)
+            if self.cihaz == "cuda" and self.ayarlar.dusuk_vram:
+                pipe.enable_model_cpu_offload()
+            else:
+                cn.to(self.cihaz)
+            self.pipe_cn_inp = pipe
+        except Exception as e:  # noqa: BLE001 - ControlNet'siz yönteme düşülür
+            print(f"⚠️ Inpaint ControlNet yüklenemedi, eski yöntem kullanılacak: {e}", flush=True)
+            self.durum_notlari.append("Inpaint ControlNet yüklenemedi; Aşama 3 küçük ayrıntılarda zayıf olabilir.")
+        return self.pipe_cn_inp
+
     def bolge_duzenle(self, kaynak, maske, pozitif, negatif, adet=3, tohum=-1, adim=30, cfg=8.0,
                       guc=1.0, kenar=BOLGE_KENARI, ilerleme=None):
         """Yalnızca maskelenen bölgeyi yeniden çizer (yara izi, ben, küpe gibi küçük ayrıntılar).
 
-        Maskenin çevresi `kenar` piksel payla kırpılıp 512 piksele büyütülür,
-        orada çizilir ve kaynağa geri yapıştırılır; böylece küçük ayrıntılar tam
-        çözünürlükte üretilir, maskenin dışı piksel piksel korunur.
+        Maskenin çevresi (en az BOLGE_EN_AZ_KUTU kenarlı kare) kırpılıp 512 piksele
+        büyütülür, inpaint ControlNet'iyle çizilir ve yumuşak maskeyle kaynağa geri
+        yapıştırılır; maskenin dışı piksel piksel korunur. ControlNet, maskeli bölgenin
+        "burada boşluk var" bilgisini UNet'e verdiği için standart UNet'in çevredeki
+        düz cildi geri getirme eğilimini kırar (testte küçük ben bu yüzden çizilmiyordu).
         Dönüş: [(PIL görsel, tohum, benzerlik), ...]; benzerlik kaynağa göredir.
         """
         import torch
@@ -460,10 +507,21 @@ class Motor:
             maske = maske.resize(kaynak.size, Image.NEAREST)
         if maske.getbbox() is None:
             raise ValueError("Maske boş: değişecek bölgeyi fırçayla boyayın.")
-        maske = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE_BULANIKLIGI)
+        yumusak = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE_BULANIKLIGI)
         yuz = self.yuz_bul(kaynak)
+        cn_pipe = self._cn_inpaint_hazirla()
 
         poz_emb, neg_emb = self._prompt_kodla(pozitif, negatif)
+        # strength adım sayısını kısaltır; kaliteyi korumak için telafi et
+        adim_i = max(adim, int(round(adim / max(float(guc), 0.2))))
+        if cn_pipe is not None:
+            kutu = kirpma_kutusu(maske.getbbox(), kaynak.size, kenar, BOLGE_EN_AZ_KUTU)
+            kirpik = kaynak.crop(kutu).resize((512, 512), Image.LANCZOS)
+            kirpik_maske = maske.crop(kutu).resize((512, 512), Image.NEAREST)
+            dizi = np.asarray(kirpik, dtype=np.float32) / 255.0
+            dizi[np.asarray(kirpik_maske) > 127] = -1.0  # inpaint ControlNet'in beklediği boşluk işareti
+            kosul = torch.from_numpy(dizi.transpose(2, 0, 1))[None]
+
         sonuclar = []
         with self._ip_adapter_kapali():
             for i, t in enumerate(self._tohumlar(tohum, adet)):
@@ -471,17 +529,24 @@ class Motor:
                     ilerleme(i / adet, f"Varyasyon {i + 1}/{adet} üretiliyor...")
                 gen = torch.Generator("cpu").manual_seed(t)
                 with torch.inference_mode():
-                    cikti = self.pipe_inp(
-                        prompt_embeds=poz_emb,
-                        negative_prompt_embeds=neg_emb,
-                        image=kaynak, mask_image=maske,
-                        strength=float(guc), padding_mask_crop=int(kenar),
-                        width=512, height=512,
-                        # strength adım sayısını kısaltır; kaliteyi korumak için telafi et
-                        num_inference_steps=max(adim, int(round(adim / max(float(guc), 0.2)))),
-                        guidance_scale=cfg,
-                        generator=gen,
-                    ).images[0]
+                    if cn_pipe is not None:
+                        cizim = cn_pipe(
+                            prompt_embeds=poz_emb, negative_prompt_embeds=neg_emb,
+                            image=kirpik, mask_image=kirpik_maske, control_image=kosul,
+                            strength=float(guc), width=512, height=512,
+                            num_inference_steps=adim_i, guidance_scale=cfg, generator=gen,
+                        ).images[0]
+                        cikti = kaynak.copy()
+                        geri = cizim.resize((kutu[2] - kutu[0], kutu[3] - kutu[1]), Image.LANCZOS)
+                        cikti.paste(geri, kutu[:2], yumusak.crop(kutu))
+                    else:
+                        cikti = self.pipe_inp(
+                            prompt_embeds=poz_emb, negative_prompt_embeds=neg_emb,
+                            image=kaynak, mask_image=yumusak,
+                            strength=float(guc), padding_mask_crop=int(kenar),
+                            width=512, height=512,
+                            num_inference_steps=adim_i, guidance_scale=cfg, generator=gen,
+                        ).images[0]
                 benzerlik = self.kimlik_benzerligi(None, cikti, yuz_a=yuz) if yuz is not None else None
                 sonuclar.append((cikti, t, benzerlik))
         self._bellek_temizle()
