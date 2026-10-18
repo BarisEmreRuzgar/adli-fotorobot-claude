@@ -325,31 +325,31 @@ def prompt_olustur(oz, onceki=None, referans=None):
 
 
 # Aşama 3 (bölgesel ayrıntı) için hazır ayrıntılar: Türkçe etiket → İngilizce prompt.
-# Colab testinde "thin pale scar" gibi sade tarifler bölgeyi düz cilt olarak yeniden
-# çizdi; "prominent visible ..." gibi belirgin tarifler izi gerçekten çizdirdi.
+# Kısa nesne adları; bolge_promptu bunları ağırlıklandırır.
 BOLGE_ORNEKLERI = {
-    "Yara izi": "prominent visible pale healed scar line, raised scar tissue on the skin",
-    "Ben": "prominent dark brown mole on the skin",
+    "Yara izi": "pale healed scar line, raised scar tissue",
+    "Ben": "dark brown mole, beauty spot",
     "Halka küpe": "small shiny silver hoop earring pierced through the earlobe",
-    "Dövme": "visible black ink tattoo on the skin",
-    "Çil": "many visible brown freckles on the skin",
-    "Derin kırışıklık": "deep prominent wrinkles in the skin",
+    "Dövme": "black ink tattoo",
+    "Çil": "brown freckles",
+    "Derin kırışıklık": "deep wrinkles",
     "Kırık burun kemeri": "crooked nose bridge, previously broken nose",
 }
+# Ayrıntının ağırlığı. Colab testi (aynı kaynak/maske/tohum): "prominent dark brown mole
+# on the skin, RAW photo, close-up of human skin, ..." 0/3 ben çizdi; "(dark brown
+# mole:1.6), ..." 5/6. Cilt tarifleri modeli düz cilde itiyor, ağırlıksız nesne kayboluyor.
+BOLGE_AGIRLIGI = 1.6
 
 
 def bolge_promptu(detay):
     """Aşama 3 için kısa (pozitif, negatif) prompt çifti.
 
-    Yalnızca maskelenen bölge yeniden çizildiği için prompt o bölgeyi
-    tarif eder; yüzün geri kalanını anlatmaya gerek yoktur ve kısa prompt
-    77 token'lık tek parçada kalır.
+    Yalnızca maskelenen bölge yeniden çizildiği için prompt yalnızca eklenecek
+    ayrıntıyı (ağırlıklı) söyler; "cilt" gibi bölgeyi tarif eden sözcükler
+    modeli mevcut düz cildi yeniden çizmeye ittiği için kullanılmaz.
     """
     detay = " ".join((detay or "").split()).strip(" ,.")
-    pozitif = ", ".join(p for p in [
-        detay, "RAW photo, close-up of human skin, photorealistic",
-        "natural skin texture, sharp focus, even studio lighting",
-    ] if p)
+    pozitif = ", ".join(p for p in [agirlikli(detay, BOLGE_AGIRLIGI), "photo, realistic"] if p)
     negatif = ("worst quality, low quality, blurry, jpeg artifacts, cartoon, painting, drawing, "
                "3d render, deformed, text, watermark, makeup")
     return pozitif, negatif

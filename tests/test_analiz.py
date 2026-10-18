@@ -297,15 +297,17 @@ def test_agirlikli_parcala_agirliklari_tokenlara_tasir():
                         ([4, 2, VIRGUL, 1], [1.5, 1.5, 1.0, 1.0])]
 
 
-def test_bolge_promptu_kisa_ve_tek_parca():
-    from fotorobot.ozellikler import BOLGE_ORNEKLERI, bolge_promptu
+def test_bolge_promptu_kisa_agirlikli_ve_cilt_tarifsiz():
+    from fotorobot.ozellikler import BOLGE_AGIRLIGI, BOLGE_ORNEKLERI, bolge_promptu
 
     for detay in BOLGE_ORNEKLERI.values():
         poz, neg = bolge_promptu(detay)
-        assert poz.startswith(detay)
+        assert poz.startswith(f"({detay}:{BOLGE_AGIRLIGI:g})")
+        # Cilt tarifi modeli düz cilde itiyordu
+        assert "skin" not in poz.replace(detay, "")
         # CLIP tokenizer yok; kelime sayısı 75 token'ın çok altında kalmalı
         assert len(poz.replace(",", " ").split()) < 40
-    assert bolge_promptu("  scar ,  ")[0].startswith("scar, RAW photo")
+    assert bolge_promptu("  scar ,  ")[0] == f"(scar:{BOLGE_AGIRLIGI:g}), photo, realistic"
 
 
 def test_maske_ciz_nokta_ve_cizgi():
