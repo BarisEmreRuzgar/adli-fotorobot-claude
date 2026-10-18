@@ -298,14 +298,16 @@ def prompt_olustur(oz, onceki=None, referans=None):
     return pozitif, ", ".join(dict.fromkeys(negatif))
 
 
-# Aşama 3 (bölgesel ayrıntı) için hazır ayrıntılar: Türkçe etiket → İngilizce prompt
+# Aşama 3 (bölgesel ayrıntı) için hazır ayrıntılar: Türkçe etiket → İngilizce prompt.
+# Colab testinde "thin pale scar" gibi sade tarifler bölgeyi düz cilt olarak yeniden
+# çizdi; "prominent visible ..." gibi belirgin tarifler izi gerçekten çizdirdi.
 BOLGE_ORNEKLERI = {
-    "Yara izi": "thin pale healed scar on the skin",
-    "Ben": "small dark brown mole on the skin",
-    "Halka küpe": "small silver hoop earring on the earlobe",
-    "Dövme": "small black ink tattoo on the skin",
-    "Çil": "freckles on the skin",
-    "Derin kırışıklık": "deep wrinkles in the skin",
+    "Yara izi": "prominent visible pale healed scar line, raised scar tissue on the skin",
+    "Ben": "prominent dark brown mole on the skin",
+    "Halka küpe": "small shiny silver hoop earring pierced through the earlobe",
+    "Dövme": "visible black ink tattoo on the skin",
+    "Çil": "many visible brown freckles on the skin",
+    "Derin kırışıklık": "deep prominent wrinkles in the skin",
     "Kırık burun kemeri": "crooked nose bridge, previously broken nose",
 }
 

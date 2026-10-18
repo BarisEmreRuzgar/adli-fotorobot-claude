@@ -443,8 +443,8 @@ class Motor:
 
     # ── Aşama 3 ────────────────────────────────────────────────────────
 
-    def bolge_duzenle(self, kaynak, maske, pozitif, negatif, adet=3, tohum=-1, adim=30, cfg=6.0,
-                      guc=0.75, kenar=BOLGE_KENARI, ilerleme=None):
+    def bolge_duzenle(self, kaynak, maske, pozitif, negatif, adet=3, tohum=-1, adim=30, cfg=8.0,
+                      guc=1.0, kenar=BOLGE_KENARI, ilerleme=None):
         """Yalnızca maskelenen bölgeyi yeniden çizer (yara izi, ben, küpe gibi küçük ayrıntılar).
 
         Maskenin çevresi `kenar` piksel payla kırpılıp 512 piksele büyütülür,

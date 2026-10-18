@@ -43,6 +43,9 @@ ETIKET_ALAN = {v: k for k, v in ALAN_ETIKETLERI.items()}
 
 # Aksesuar kaldırılırken kullanılacak en düşük değişim miktarı (txt2img'ye geçer)
 KALDIRMA_DEGISIMI = 1.0
+# Aşama 3'te en düşük CFG: testte varsayılan 6'da işaretli bölge düz cilt olarak
+# yeniden çizildi, 8'de ayrıntı (yara izi) çizildi
+BOLGE_EN_AZ_CFG = 8.0
 
 
 def oz_tablo(oz):
@@ -362,6 +365,7 @@ class Uygulama:
         if not noktalar:
             return [], [], "❌ Ayrıntının olacağı yere görsel üzerinde tıklayın.", vaka_id
         maske = maske_ciz(kaynak_pil.size, noktalar, yaricap, birlestir)
+        cfg = max(float(cfg), BOLGE_EN_AZ_CFG)
         if not (detay or "").strip():
             return [], [], "❌ Eklenecek ayrıntıyı yazın veya listeden seçin.", vaka_id
         if not self.motor.hazir:
@@ -392,7 +396,9 @@ class Uygulama:
             "gorseller": [x["yol"] for x in liste],
         })
         rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}",
-                 "ℹ️ Maskenin dışı değişmez; kimlik benzerliği kaynağa göredir.", "", "Prompt:", pozitif]
+                 "ℹ️ Maskenin dışı değişmez; kimlik benzerliği kaynağa göredir.",
+                 f"ℹ️ CFG {cfg:g} (Aşama 3'te en az {BOLGE_EN_AZ_CFG:g}). Ayrıntı çıkmazsa fırçayı büyütüp "
+                 "tarifi daha belirgin yazın.", "", "Prompt:", pozitif]
         return galeri, liste, "\n".join(rapor), vaka_id
 
     @staticmethod
@@ -534,7 +540,7 @@ class Uygulama:
                             bolge_onizleme = gr.Image(label="🖌️ Ayrıntının yerine tıklayın", type="pil",
                                                       height=480, interactive=False)
                             with gr.Row():
-                                yaricap = gr.Slider(3, 40, value=8, step=1, label="Fırça yarıçapı (piksel)")
+                                yaricap = gr.Slider(3, 40, value=12, step=1, label="Fırça yarıçapı (piksel)")
                                 birlestir = gr.Checkbox(value=True, label="Noktaları çizgiyle birleştir")
                             with gr.Row():
                                 btn_nokta_sil = gr.Button("↩️ Son noktayı sil", size="sm")
@@ -544,9 +550,9 @@ class Uygulama:
                             hazir_detay = gr.Dropdown(list(BOLGE_ORNEKLERI), label="Hazır ayrıntı",
                                                       value=None)
                             detay = gr.Textbox(label="✏️ Eklenecek ayrıntı (İngilizce)", lines=2,
-                                               placeholder="thin pale healed scar on the skin")
+                                               placeholder="prominent visible pale healed scar line on the skin")
                             with gr.Row():
-                                guc3 = gr.Slider(0.4, 1.0, value=0.75, step=0.05,
+                                guc3 = gr.Slider(0.4, 1.0, value=1.0, step=0.05,
                                                  label="Değişim gücü (yüksek = ayrıntı daha belirgin)")
                                 adet3 = gr.Slider(1, 6, value=3, step=1, label="Varyasyon sayısı")
                             btn_bolge = gr.Button("🖌️ Bölgeyi yeniden çiz", variant="primary", size="lg")

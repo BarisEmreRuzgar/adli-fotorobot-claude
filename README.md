@@ -96,7 +96,9 @@ python app.py               # --share: herkese açık bağlantı, --low-vram: d�
 1. Ayrıntının olacağı yere görsel üzerinde tıklayın (örneğin sol kaşın üstü). Uzun bir iz için başından sonuna birkaç noktaya tıklayın; noktalar fırça kalınlığında çizgiyle birleşir. İşaretli bölge kırmızı görünür.
 2. **Hazır ayrıntı** listesinden seçin veya İngilizce yazın (`thin pale healed scar on the skin`).
 3. **🖌️ Bölgeyi yeniden çiz**: yalnızca işaretli bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
-4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi işaretleyin. Maskeler de vaka kaydına yazılır.
+4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi işaretleyin.
+
+Colab testinde (T4) yara izi ancak geniş fırça (yarıçap 12-14), belirgin tarif (`prominent visible ...`), CFG 8 ve değişim gücü 1.0 ile çizildi; sade tarif ve CFG 6 ile bölge düz cilt olarak yeniden çiziliyordu. Varsayılanlar buna göre ayarlıdır. Maskenin dışındaki piksel farkı 0.01'in altında, kimlik benzerliği %99+ ölçüldü. Maskeler de vaka kaydına yazılır.
 
 ---
 
