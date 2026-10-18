@@ -61,9 +61,6 @@ class Ayarlar:
     image_encoder_klasor: str = _env("FOTOROBOT_IMAGE_ENCODER_SUBFOLDER", "models/image_encoder")
     ip_repo: str = _env("FOTOROBOT_IP_REPO", "h94/IP-Adapter-FaceID")
     ip_agirlik: str = _env("FOTOROBOT_IP_WEIGHT", "ip-adapter-faceid-plusv2_sd15.bin")
-    # Aşama 3 (bölgesel ayrıntı) için inpaint ControlNet'i; ilk kullanımda yüklenir (~700 MB).
-    # Boş bırakılırsa ControlNet'siz maske karıştırma kullanılır.
-    inpaint_controlnet: str = _env("FOTOROBOT_INPAINT_CONTROLNET", "lllyasviel/control_v11p_sd15_inpaint")
     ip_lora: str = _env("FOTOROBOT_IP_LORA", "ip-adapter-faceid-plusv2_sd15_lora.safetensors")
     cikti_klasoru: Path = Path(_env("FOTOROBOT_OUTPUT_DIR", "ciktilar"))
     # Aynı ifade/komut için Gemini yanıtını diskten kullan (kota + yeniden üretilebilirlik)
