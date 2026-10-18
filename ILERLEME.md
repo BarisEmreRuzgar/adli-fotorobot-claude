@@ -1,7 +1,7 @@
 # Gemini planı: uygulama ve test günlüğü
 
 Başlangıç: 2026-10-18. Her adım Colab T4'te aynı tohumla eski sürüme karşı ölçülür;
-kazanç yoksa geri alınır. Deney betikleri Colab'da `/content/ab_*.py`, görselleri `/content/ab_*.png`.
+kazanç yoksa geri alınır. Deney betikleri `deneme` dalında `deneyler/`, görselleri Colab'da `/content/ab_*.png`.
 
 | # | Adım | Durum | Sonuç |
 |---|---|---|---|
@@ -14,6 +14,7 @@ kazanç yoksa geri alınır. Deney betikleri Colab'da `/content/ab_*.py`, görse
 | 2 | Aşama 2: bölgesel maskeli düzenleme (MediaPipe yerine InsightFace noktaları) | ✅ tutuldu (`deneme`) | Kimlik +4/+7 puan, değişmeyen her şey birebir korunuyor |
 | 2b | Saç rengi: bölgesel değişim gücü 0.9 vs 1.0 | ✅ 0.9 kaldı | 1.0 uzun saçta yüzü bozuyor; 0.9 uzun saçta 3/3 açık renk, kısa saçta gri |
 | 2c | Saç maskesi omuz/kıyafeti kapsamasın | ✅ tutuldu (`deneme`) | Uzun saçta tişört 3/3 korundu (önce değişiyordu), saç 3/3 açık sarı, kimlik aynı |
+| 3c | Yeri belli ben: Aşama 1 prompt'u yerine yüz noktalarından otomatik Aşama 3 | ✅ eklendi | Yanak 0/4 → 4/4, kaş üstü 0/4 → 4/4, doğru tarafta |
 | 1c | Aşama 3: 9 kanallı RV inpainting UNet'i | ❌ eklenmedi | Hiçbir şey çizmiyor: ben 0/5 (4 kanal 4/5), yara 0/10 |
 
 ## Ayrıntılar
@@ -82,3 +83,13 @@ Maske çenenin 0.3 yüz boyu altında kesiliyor (resmin dışına taşarsa kesil
 PIL hatası verdi, deneyde yakalandı ve test eklendi). Aynı tohumla uzun saçlı yüz: %90/%87/%84
 (önce %89/%87/%85), gri tişört 3/3 korundu, saç 3/3 açık sarı. Kısa saçlı yüzde yüz kadraja çok
 yakın olduğu için kesim resmin dışında kalıyor, sonuç değişmedi.
+
+### Adım 3c: Ben, Aşama 1'den otomatik Aşama 3'e (Gemini planı c'nin ikinci yarısı; tohum 4242, 4 varyasyon)
+| Tarif | Prompt'ta (eski) | Yüz noktalarından Aşama 3 (yeni) |
+|---|---|---|
+| small dark mole on the left cheek | 0/4 görünür ben | 4/4, kişinin sol yanağında |
+| small dark mole above the right eyebrow | 0/4 | 4/4, kişinin sağ kaşının üstünde (bazıları biraz yüksek → nokta 0.6'dan 0.45 göz arası mesafeye indi) |
+Uygulama: `ben_konumlari` ozel alanından yeri ve tarafı belli benleri ayıklar (yanak/kaş üstü için taraf şart;
+alın, çene, dudak üstü, burun tarafsız olabilir), Aşama 1 prompt'undan çıkarır; `ben_noktasi` noktayı 5 yüz
+noktasından hesaplar, her varyasyona fırça 9 + ağırlık 1.35 ile çizilir. Kapatmak için `FOTOROBOT_AUTO_MOLE=0`.
+Yara izi otomatiğe alınmadı: Aşama 3'te güvenilir değil (1b). Sınır: Aşama 2 tüm yüzü yeniden çizerse ben kaybolabilir.

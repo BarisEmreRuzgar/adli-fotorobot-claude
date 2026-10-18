@@ -108,6 +108,33 @@ def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
     return maske
 
 
+def ben_noktasi(kps, yer, taraf=None):
+    """Benin görüntüdeki yeri (x, y): InsightFace'in 5 noktasından. taraf kişinin kendi
+    sağı/solu; kişinin solu görüntünün sağındadır (kps[1] göz, kps[4] ağız köşesi)."""
+    (lx, ly), (rx, ry), (nx, ny), (mlx, mly), (mrx, mry) = [tuple(map(float, p)) for p in kps]
+    d = max(abs(rx - lx), 1.0)
+    if taraf == "sol":
+        gx, gy, ax, ay, yon = rx, ry, mrx, mry, 1.0
+    else:
+        gx, gy, ax, ay, yon = lx, ly, mlx, mly, -1.0
+    if taraf is None:
+        yon = 0.0
+    if yer == "yanak":
+        return (gx + ax) / 2 + yon * 0.25 * d, (gy + ay) / 2
+    if yer == "kas_ustu":
+        return gx, gy - 0.45 * d
+    if yer == "alin":
+        return (lx + rx) / 2 + yon * 0.3 * d, (ly + ry) / 2 - 0.9 * d
+    if yer == "cene":
+        return (mlx + mrx) / 2 + yon * 0.2 * d, (mly + mry) / 2 + 0.55 * d
+    if yer == "dudak_ustu":
+        x = ax - yon * 0.1 * d if taraf else (mlx + mrx) / 2 + 0.2 * d
+        return x, min(mly, mry) - 0.3 * d
+    if yer == "burun":
+        return nx + yon * 0.15 * d, ny - 0.1 * d
+    raise ValueError(f"bilinmeyen ben yeri: {yer}")
+
+
 def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
     """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler.
 

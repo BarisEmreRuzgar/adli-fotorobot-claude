@@ -67,6 +67,8 @@ class Ayarlar:
     gemini_onbellek: bool = _env_bool("FOTOROBOT_GEMINI_CACHE", True)
     # Aşama 2'de yalnızca değişen yüz bölgesini (göz, sakal, saç...) yeniden çiz
     bolgesel_duzenleme: bool = _env_bool("FOTOROBOT_REGIONAL_EDIT", True)
+    # Aşama 1'de yeri belli benleri prompt yerine yüz noktalarına göre Aşama 3 ile çiz
+    otomatik_ben: bool = _env_bool("FOTOROBOT_AUTO_MOLE", True)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

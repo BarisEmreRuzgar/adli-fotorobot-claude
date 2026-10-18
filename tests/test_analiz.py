@@ -489,3 +489,37 @@ def test_degisiklik_bolgeleri_yalnizca_degisen_aksesuar(ornek_erkek):
     once = dict(ornek_erkek, aksesuar="thin metal glasses, small silver hoop earring")
     sonra = dict(ornek_erkek, aksesuar="small silver hoop earring")
     assert degisiklik_bolgeleri(once, sonra) == {"goz"}
+
+
+def test_ben_konumlari_yeri_belli_benleri_ayiklar():
+    from fotorobot.ozellikler import ben_konumlari
+
+    kalan, benler = ben_konumlari("visible scar on right cheek, small dark mole on the left cheek")
+    assert kalan == "visible scar on right cheek" and benler == [("yanak", "sol")]
+    kalan, benler = ben_konumlari("mole above right eyebrow and a mole on chin")
+    assert kalan == "" and benler == [("kas_ustu", "sag"), ("cene", None)]
+    # Tarafı belli olmayan yanak beni ve yeri olmayan ben prompt'ta kalır
+    assert ben_konumlari("mole on cheek, mole") == ("mole on cheek, mole", [])
+    # "and" sözcük içinde bölünmez
+    assert ben_konumlari("sandy freckles") == ("sandy freckles", [])
+
+
+def test_ben_noktasi_kisinin_soluna_goruntunun_sagina_cizer():
+    import numpy as np
+
+    from fotorobot.motor import ben_noktasi
+
+    kps = np.array([[200, 260], [312, 260], [256, 320], [215, 380], [297, 380]])
+    x, y = ben_noktasi(kps, "yanak", "sol")
+    assert x > 312 and 260 < y < 380
+    x, y = ben_noktasi(kps, "yanak", "sag")
+    assert x < 200
+    x, y = ben_noktasi(kps, "kas_ustu", "sag")
+    assert x == 200 and y < 260
+    x, y = ben_noktasi(kps, "cene", None)
+    assert x == 256 and y > 380
+
+
+def test_kural_analiz_kas_ustu_beni_tarafli():
+    oz = ifade_analiz("Sağ kaşının üstünde belirgin ben var.")[0]
+    assert "mole above right eyebrow" in oz["ozel"]

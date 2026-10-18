@@ -39,6 +39,7 @@ Sistem tanık ifadesini analiz ederek yüz özelliklerini (yaş, cinsiyet, saç,
 | 🔁 **Art arda düzenleme** | Sonucu yeni kaynak yapma, geçmiş ve geri alma; kimlik her zaman ilk yüzden alınır (kayma olmaz) |
 | 📤 **Fotoğraf yükleme** | Aşama 2'ye kendi fotoğrafınızı yükleyip düzenleyebilirsiniz |
 | 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar tıklanarak işaretlenen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
+| 📍 **Otomatik ben** | Tanık benin yerini söylediyse ("sol yanağında ben") ben prompt'a yazılmaz; üretilen her yüzde yüz noktalarından yeri hesaplanıp oraya çizilir (prompt'ta 0/4, böyle 4/4) |
 | 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum, maskeler ve benzerlikler `ciktilar/` altına yazılır; ZIP'te her dosyanın SHA-256 özeti (`manifest.sha256`) bulunur |
 | ⚠️ **YZ tahmini uyarısı** | Tanığın belirtmediği, modelin tamamladığı özellikler görselin üstünde ve vaka kaydında belirtilir |
 | 💾 **Düşük VRAM desteği** | 6 GB GPU'larda çalışır; daha düşük bellekte otomatik CPU offload |

@@ -8,9 +8,10 @@ from . import __version__
 from .config import Ayarlar, api_anahtari_bul
 from .gemini import Gemini
 from .kayit import VakaKaydi, gorsel_ac, yeni_vaka_id
+from .motor import ben_noktasi
 from .ozellikler import (
-    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, bolge_promptu, degisiklik_bolgeleri, normalize,
-    ozet_metni, prompt_olustur, varsayilan_ozellikler,
+    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, ben_konumlari, bolge_promptu, degisiklik_bolgeleri,
+    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler,
 )
 
 ORNEK_IFADELER = [
@@ -49,6 +50,10 @@ KALDIRMA_DEGISIMI = 1.0
 # Aşama 3'te en düşük CFG: testte varsayılan 6'da işaretli bölge düz cilt olarak
 # yeniden çizildi, 8'de ayrıntı (yara izi) çizildi
 BOLGE_EN_AZ_CFG = 8.0
+# Ben fırçası: Aşama 3 testinde yarıçap 9 + ağırlık 1.35 → 5/5 doğal ben
+BEN_YARICAPI = 9
+BEN_YER_ADLARI = {"yanak": "yanak", "kas_ustu": "kaş üstü", "alin": "alın", "cene": "çene",
+                  "dudak_ustu": "dudak üstü", "burun": "burun"}
 
 
 def oz_tablo(oz):
@@ -184,7 +189,10 @@ class Uygulama:
         if not self.motor.hazir:
             return gr.update(), [], "❌ Modeller yüklenemedi; konsoldaki hatayı kontrol edin.", vaka_id
         oz = tablodan_oz(tablo)
-        pozitif, negatif = prompt_olustur(oz)
+        benler = []
+        if self.ayarlar.otomatik_ben:
+            kalan, benler = ben_konumlari(oz["ozel"])
+        pozitif, negatif = prompt_olustur(dict(oz, ozel=kalan) if benler else oz)
         vaka_id = vaka_id or yeni_vaka_id()
         kayit = self._kayit(vaka_id)
         try:
@@ -192,6 +200,7 @@ class Uygulama:
                 pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim), cfg=float(cfg),
                 ilerleme=lambda o, m: progress(o, desc=m),
             )
+            cizilen = self._benleri_ciz(sonuclar, benler, int(adim), progress) if benler else 0
         except Exception as e:  # noqa: BLE001
             return gr.update(), [], _hata_metni(e), vaka_id
         galeri, liste = [], []
@@ -203,9 +212,33 @@ class Uygulama:
             "tanik_ifadesi": ifade, "ozellikler": oz, "prompt": pozitif, "negatif_prompt": negatif,
             "tohumlar": [t for _, t in sonuclar], "adim": int(adim), "cfg": float(cfg),
             "gorseller": [x["yol"] for x in liste],
+            "otomatik_benler": [{"yer": y, "taraf": tr} for y, tr in benler],
         })
-        rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}", "", "Prompt:", pozitif]
+        rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}"]
+        if benler:
+            yerler = ", ".join(BEN_YER_ADLARI[y] + (f" ({'sağ' if tr == 'sag' else 'sol'})" if tr else "")
+                               for y, tr in benler)
+            rapor.append(f"🖌️ Ben yüz noktalarına göre çizildi: {yerler} · {cizilen}/{len(sonuclar)} yüzde")
+        rapor += ["", "Prompt:", pozitif]
         return galeri, liste, "\n".join(rapor), vaka_id
+
+    def _benleri_ciz(self, sonuclar, benler, adim, progress):
+        """Yeri belli benleri her varyasyona Aşama 3 yöntemiyle çizer (sonuclar yerinde
+        güncellenir). Yüzü bulunamayan varyasyon olduğu gibi kalır. Dönüş: çizilen yüz sayısı."""
+        pozitif, negatif = bolge_promptu(BOLGE_ORNEKLERI["Ben"])
+        cizilen = 0
+        for i, (gorsel, t) in enumerate(sonuclar):
+            progress(i / len(sonuclar), desc=f"Ben çiziliyor ({i + 1}/{len(sonuclar)})")
+            yuz = self.motor.yuz_bul(gorsel)
+            if yuz is None:
+                continue
+            noktalar = [ben_noktasi(yuz.kps, yer, taraf) for yer, taraf in benler]
+            maske = maske_ciz(gorsel.size, noktalar, BEN_YARICAPI, birlestir=False)
+            yeni = self.motor.bolge_duzenle(gorsel, maske, pozitif, negatif, adet=1, tohum=t, adim=adim,
+                                            cfg=BOLGE_EN_AZ_CFG)
+            sonuclar[i] = (yeni[0][0], t)
+            cizilen += 1
+        return cizilen
 
     def analiz_ve_uret(self, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
         tablo, analiz_raporu, oz, uyari, tahmin = self.analiz_et(ifade)

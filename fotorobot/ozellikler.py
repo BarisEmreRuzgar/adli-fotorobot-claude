@@ -387,6 +387,46 @@ BOLGE_ORNEKLERI = {
 BOLGE_AGIRLIGI = 1.35
 
 
+# Aşama 1 prompt'unda yazılan ben neredeyse hiç çizilmiyor (Colab testi, 4 tohum: yanakta
+# 0/4, kaş üstünde 0/4). Yeri belli benler prompt'tan çıkarılıp üretilen yüze, yüz
+# noktalarından hesaplanan yere Aşama 3 ile çizilir (aynı testte 4/4 ve 4/4 doğru yerde).
+BEN_SOZCUKLERI = ("mole", "beauty mark", "beauty spot")
+BEN_YERLERI = (  # (anahtar sözcükler, yer); sıra önemli: özelden genele
+    (("eyebrow", "brow"), "kas_ustu"),
+    (("upper lip", "above the lip", "above lip", "above his lip", "above her lip"), "dudak_ustu"),
+    (("cheek",), "yanak"),
+    (("chin",), "cene"),
+    (("forehead",), "alin"),
+    (("nose",), "burun"),
+)
+# Bu yerlerde taraf (sağ/sol) bilinmeden nokta seçilemez
+TARAF_GEREKEN = {"kas_ustu", "yanak"}
+
+
+def ben_konumlari(ozel):
+    """`ozel` alanındaki yeri belli benleri ayıklar.
+
+    Döndürür: (kalan_ozel, [(yer, taraf), ...]). taraf kişinin kendi sağı/solu
+    ("sag"/"sol") ya da None. Yeri anlaşılamayan ben `kalan_ozel`de kalır.
+    """
+    kalan, benler = [], []
+    for parca in re.split(r",|;|\band\b", ozel or ""):
+        p = parca.strip()
+        k = p.lower()
+        if not p:
+            continue
+        if not any(b in k for b in BEN_SOZCUKLERI):
+            kalan.append(p)
+            continue
+        yer = next((y for sozcukler, y in BEN_YERLERI if any(x in k for x in sozcukler)), None)
+        taraf = "sag" if re.search(r"\bright\b", k) else "sol" if re.search(r"\bleft\b", k) else None
+        if yer is None or (yer in TARAF_GEREKEN and taraf is None):
+            kalan.append(p)
+        else:
+            benler.append((yer, taraf))
+    return ", ".join(kalan), benler
+
+
 def bolge_promptu(detay):
     """Aşama 3 için kısa (pozitif, negatif) prompt çifti.
 
