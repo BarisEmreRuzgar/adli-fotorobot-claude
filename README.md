@@ -61,7 +61,7 @@ Gereksinimler: NVIDIA GPU (en az 6 GB önerilir), [Python 3.11](https://www.pyth
 2. `kurulum.bat` dosyasına çift tıklayın (bir kez).
 3. `baslat.bat` dosyasına çift tıklayın. Tarayıcıda `http://127.0.0.1:7860` açılır.
 
-İlk çalıştırmada modeller indirilir (~7 GB). Gemini anahtarını `baslat.bat` içine yazabilir veya arayüzdeki **⚙️ Ayarlar** bölümünden girebilirsiniz.
+İlk çalıştırmada modeller indirilir (~7 GB). Gemini anahtarını `baslat.bat` içine yazabilir veya arayüzün altındaki **🔧 Uzman ayarları** bölümünden girebilirsiniz.
 
 <details>
 <summary>Linux / elle kurulum</summary>

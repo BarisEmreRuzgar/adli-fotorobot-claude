@@ -438,19 +438,6 @@ class Uygulama:
             bolge_kaynak = gr.State(None)
             bolge_noktalar = gr.State([])
 
-            with gr.Accordion("⚙️ Ayarlar", open=False):
-                with gr.Row():
-                    anahtar = gr.Textbox(
-                        label="Gemini API anahtarı (isteğe bağlı)", type="password", scale=3,
-                        placeholder="Boş bırakılırsa kural tabanlı Türkçe analiz kullanılır",
-                    )
-                    btn_anahtar = gr.Button("Kaydet ve test et", scale=1)
-                anahtar_durum = gr.Markdown()
-                with gr.Row():
-                    adim = gr.Slider(15, 60, value=25, step=1, label="Adım sayısı (kalite ↔ hız)")
-                    cfg = gr.Slider(3, 10, value=6.0, step=0.5, label="Prompt'a bağlılık (CFG)")
-                    tohum = gr.Number(value=-1, precision=0, label="Tohum (-1 = rastgele)")
-
             with gr.Tabs() as sekmeler:
                 with gr.Tab("1️⃣ Tanık İfadesi → Fotorobot", id=0):
                     with gr.Row():
@@ -497,11 +484,11 @@ class Uygulama:
                             degisiklik = gr.Textbox(label="✏️ Ne değişsin?", lines=4,
                                                     placeholder="sakalı temizle\ngözlük ekle")
                             gr.Examples(ORNEK_DEGISIKLIKLER, inputs=degisiklik, label="Örnek komutlar")
-                            with gr.Row():
-                                kimlik_gucu = gr.Slider(0.3, 1.2, value=0.6, step=0.05,
-                                                        label="Kimlik koruma gücü")
-                                degisim = gr.Slider(0.3, 1.0, value=0.8, step=0.05,
-                                                    label="Değişim miktarı (1.0 = pozu da yeniden üret)")
+                            kimlik_gucu = gr.Slider(
+                                0.3, 1.2, value=0.6, step=0.05, label="Yüz ne kadar aynı kalsın?",
+                                info="Yüksek: yüz daha az değişir ama istenen değişiklik zayıflar. "
+                                     "Değişiklik tutmazsa (ör. gözlük) düşürün.",
+                            )
                             with gr.Row():
                                 adet2 = gr.Slider(1, 6, value=3, step=1, label="Varyasyon sayısı")
                                 btn_duzenle = gr.Button("🔄 Güncelle", variant="primary", size="lg")
@@ -551,10 +538,7 @@ class Uygulama:
                                                       value=None)
                             detay = gr.Textbox(label="✏️ Eklenecek ayrıntı (İngilizce)", lines=2,
                                                placeholder="prominent visible pale healed scar line on the skin")
-                            with gr.Row():
-                                guc3 = gr.Slider(0.4, 1.0, value=1.0, step=0.05,
-                                                 label="Değişim gücü (yüksek = ayrıntı daha belirgin)")
-                                adet3 = gr.Slider(1, 6, value=3, step=1, label="Varyasyon sayısı")
+                            adet3 = gr.Slider(1, 6, value=3, step=1, label="Varyasyon sayısı")
                             btn_bolge = gr.Button("🖌️ Bölgeyi yeniden çiz", variant="primary", size="lg")
                             rapor3 = gr.Textbox(label="📋 Rapor", lines=6, interactive=False,
                                                 elem_classes="rapor")
@@ -578,6 +562,32 @@ class Uygulama:
                     btn_zip = gr.Button("📦 Vaka arşivini hazırla (ZIP)")
                     zip_durum = gr.Markdown()
                     zip_dosya = gr.File(label="İndir", visible=False)
+
+            # Varsayılanlar testlerle seçildi; normal kullanımda değiştirmek gerekmez.
+            # Kullanılan tohum her sonucun altında ve vaka kaydında yazdığı için
+            # yeniden üretilebilirlik için de bu bölüme girmek gerekmez.
+            with gr.Accordion("🔧 Uzman ayarları", open=False):
+                gr.Markdown("Varsayılanlar testlerle seçilmiştir; normal kullanımda değiştirmeniz gerekmez.")
+                with gr.Row():
+                    anahtar = gr.Textbox(
+                        label="Gemini API anahtarı (yerel kurulum için; Colab'da Secrets'tan gelir)",
+                        type="password", scale=3,
+                        placeholder="Boş bırakılırsa kural tabanlı Türkçe analiz kullanılır",
+                    )
+                    btn_anahtar = gr.Button("Kaydet ve test et", scale=1)
+                anahtar_durum = gr.Markdown()
+                with gr.Row():
+                    adim = gr.Slider(15, 60, value=25, step=1, label="Adım sayısı",
+                                     info="Yüksek: biraz daha iyi kalite, daha yavaş")
+                    cfg = gr.Slider(3, 10, value=6.0, step=0.5, label="Prompt'a bağlılık (CFG)",
+                                    info="Yüksek: tarife daha sıkı uyar ama yapaylaşır")
+                    tohum = gr.Number(value=-1, precision=0, label="Tohum (-1 = rastgele)",
+                                      info="Bir sonucu birebir yeniden üretmek için altındaki tohumu girin")
+                with gr.Row():
+                    degisim = gr.Slider(0.3, 1.0, value=0.8, step=0.05, label="Aşama 2: değişim miktarı",
+                                        info="1.0: poz ve ışık da yeniden üretilir")
+                    guc3 = gr.Slider(0.4, 1.0, value=1.0, step=0.05, label="Aşama 3: değişim gücü",
+                                     info="Testlerde 1.0 dışında ayrıntı çizilmedi")
 
             # ── Olaylar ──────────────────────────────────────────────
             btn_anahtar.click(self.anahtar_kaydet, [anahtar], [anahtar_durum, durum])
