@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image
 
 from .config import Ayarlar
+from .ozellikler import agirliklari_ayir
 
 FACEID_ADAPTOR = "faceid_0"
 # Yalnızca tespit, kimlik (ArcFace) ve yaş/cinsiyet modelleri gerekli
@@ -59,6 +60,20 @@ def token_parcala(ids, ayirici_id, uzunluk):
     if parca or not parcalar:
         parcalar.append(parca)
     return parcalar
+
+
+def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
+    """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler."""
+    ids, agirliklar = [], []
+    for metin, agirlik in agirliklari_ayir(prompt):
+        parca_ids = tokenle(metin)
+        ids += parca_ids
+        agirliklar += [agirlik] * len(parca_ids)
+    sonuc, bas = [], 0
+    for parca in token_parcala(ids, ayirici_id, uzunluk):
+        sonuc.append((parca, agirliklar[bas:bas + len(parca)]))
+        bas += len(parca)
+    return sonuc
 
 
 class Motor:
@@ -226,25 +241,32 @@ class Motor:
         uzunluk = tok.model_max_length - 2  # BOS/EOS hariç
         virgul = tok(",", add_special_tokens=False).input_ids[0]
 
-        def parcala(metin):
-            ids = tok(metin, truncation=False, add_special_tokens=False).input_ids
-            return token_parcala(ids, virgul, uzunluk)
+        def tokenle(metin):
+            return tok(metin, truncation=False, add_special_tokens=False).input_ids
 
-        poz, neg = parcala(pozitif), parcala(negatif)
+        poz = agirlikli_parcala(pozitif, tokenle, virgul, uzunluk)
+        neg = agirlikli_parcala(negatif, tokenle, virgul, uzunluk)
         # Pozitif ve negatif gömüler aynı uzunlukta olmalı; kısa olan boş parçayla tamamlanır
         parca_sayisi = max(len(poz), len(neg))
-        poz += [[]] * (parca_sayisi - len(poz))
-        neg += [[]] * (parca_sayisi - len(neg))
+        poz += [([], [])] * (parca_sayisi - len(poz))
+        neg += [([], [])] * (parca_sayisi - len(neg))
 
         def kodla(parcalar):
             gomuler = []
-            for dilim in parcalar:
+            for dilim, agirliklar in parcalar:
+                dolgu = tok.model_max_length - len(dilim) - 2
                 dilim = [tok.bos_token_id] + dilim + [tok.eos_token_id]
-                dilim += [tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id] * (
-                    tok.model_max_length - len(dilim))
+                dilim += [tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id] * dolgu
+                agirliklar = [1.0] + agirliklar + [1.0] * (dolgu + 1)
                 tensor = torch.tensor([dilim], device=cihaz)
                 with torch.no_grad():
-                    gomuler.append(enc(tensor)[0])
+                    gomu = enc(tensor)[0]
+                    if any(a != 1.0 for a in agirliklar):
+                        # A1111 yöntemi: token gömülerini ağırlıkla çarp, genel ortalamayı koru
+                        ortalama = gomu.mean()
+                        gomu = gomu * torch.tensor(agirliklar, device=cihaz, dtype=gomu.dtype)[None, :, None]
+                        gomu = gomu * (ortalama / gomu.mean())
+                gomuler.append(gomu)
             return torch.cat(gomuler, dim=1).to(self.dtype)
 
         return kodla(poz), kodla(neg)

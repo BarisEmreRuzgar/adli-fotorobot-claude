@@ -46,6 +46,30 @@ VARSAYILAN = {
 
 YAS_ALT, YAS_UST = 14, 90
 
+# Ayırt edici izler küçük ayrıntılar olduğu için model tarafından kolayca yok sayılır
+IZ_AGIRLIGI = 1.3
+AKSESUAR_AGIRLIGI = 1.2
+
+_AGIRLIK_KALIBI = re.compile(r"\(([^():]+):\s*([0-9]*\.?[0-9]+)\)")
+
+
+def agirlikli(metin, agirlik):
+    """`(metin:agirlik)` sözdizimiyle ağırlıklandırılmış prompt parçası."""
+    return f"({metin}:{agirlik:g})" if metin and agirlik != 1 else metin
+
+
+def agirliklari_ayir(prompt):
+    """Prompt'u (metin, ağırlık) parçalarına ayırır; işaretsiz metnin ağırlığı 1.0'dır."""
+    parcalar, konum = [], 0
+    for m in _AGIRLIK_KALIBI.finditer(prompt):
+        if m.start() > konum:
+            parcalar.append((prompt[konum:m.start()], 1.0))
+        parcalar.append((m.group(1), float(m.group(2))))
+        konum = m.end()
+    if konum < len(prompt):
+        parcalar.append((prompt[konum:], 1.0))
+    return [(m, a) for m, a in parcalar if m]
+
 
 def varsayilan_ozellikler(cinsiyet=None):
     oz = copy.deepcopy(VARSAYILAN)
@@ -166,13 +190,14 @@ def _aksesuar_vurgusu(aksesuar):
     parcalar = []
     for a in [p.strip() for p in aksesuar.split(",") if p.strip()]:
         if "glasses" in a and "sun" not in a:
-            # "Belirgin çerçeve" vurgusu ince/metal gözlükleri kalın kemik çerçeveye çeviriyor
+            # "Belirgin çerçeve" vurgusu ince/metal gözlükleri kalın kemik çerçeveye çeviriyor;
+            # onlarda gözlüğün görünmesini yalnızca ağırlık sağlar
             ince = _iceriyor(a, "thin", "metal", "wire", "rimless", "frameless")
             parcalar.append(f"wearing {a}" if ince
                             else f"wearing {a}, eyeglasses with clearly visible frames on the face")
         else:
             parcalar.append(f"wearing {a}")
-    return ", ".join(parcalar)
+    return ", ".join(agirlikli(p, AKSESUAR_AGIRLIGI) for p in parcalar)
 
 
 def _fark_vurgulari(oz, onceki, kadin):
@@ -224,7 +249,7 @@ def prompt_olustur(oz, onceki=None, referans=None):
     parcalar += vurgular
     # Yara izi, küpe, gözlük gibi ayırt edici izler ilk parçada kalsın diye öne alınır
     if oz["ozel"]:
-        parcalar.append(oz["ozel"])
+        parcalar.append(agirlikli(oz["ozel"], IZ_AGIRLIGI))
     if oz["aksesuar"]:
         parcalar.append(_aksesuar_vurgusu(oz["aksesuar"]))
     parcalar += [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]

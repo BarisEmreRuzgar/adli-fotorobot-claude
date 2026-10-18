@@ -248,3 +248,33 @@ def test_token_parcala_bos():
     from fotorobot.motor import token_parcala
 
     assert token_parcala([], VIRGUL, 75) == [[]]
+
+
+def test_agirliklari_ayir():
+    from fotorobot.ozellikler import agirliklari_ayir
+
+    assert agirliklari_ayir("a man, (thin scar, left brow:1.3), (glasses:0.8)") == [
+        ("a man, ", 1.0), ("thin scar, left brow", 1.3), (", ", 1.0), ("glasses", 0.8)]
+    assert agirliklari_ayir("no weights (just text)") == [("no weights (just text)", 1.0)]
+
+
+def test_iz_ve_aksesuar_agirlikli(ornek_erkek):
+    from fotorobot.ozellikler import AKSESUAR_AGIRLIGI, IZ_AGIRLIGI
+
+    oz = dict(ornek_erkek, ozel="scar on right cheek", aksesuar="thin metal glasses")
+    poz, _ = prompt_olustur(oz)
+    assert f"(scar on right cheek:{IZ_AGIRLIGI:g})" in poz
+    assert f"(wearing thin metal glasses:{AKSESUAR_AGIRLIGI:g})" in poz
+
+
+def test_agirlikli_parcala_agirliklari_tokenlara_tasir():
+    from fotorobot.motor import agirlikli_parcala
+
+    sozluk = {",": VIRGUL}
+    def tokenle(metin):
+        # Her kelime/virgül bir token; kelimenin uzunluğu id'si olsun
+        return [sozluk.get(k, len(k)) for k in metin.replace(",", " , ").split()]
+
+    parcalar = agirlikli_parcala("aa bbb, (cccc dd:1.5), e", tokenle, VIRGUL, 4)
+    assert parcalar == [([2, 3, VIRGUL], [1.0, 1.0, 1.0]),
+                        ([4, 2, VIRGUL, 1], [1.5, 1.5, 1.0, 1.0])]
