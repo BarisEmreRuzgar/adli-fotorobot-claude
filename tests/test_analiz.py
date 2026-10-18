@@ -278,3 +278,56 @@ def test_agirlikli_parcala_agirliklari_tokenlara_tasir():
     parcalar = agirlikli_parcala("aa bbb, (cccc dd:1.5), e", tokenle, VIRGUL, 4)
     assert parcalar == [([2, 3, VIRGUL], [1.0, 1.0, 1.0]),
                         ([4, 2, VIRGUL, 1], [1.5, 1.5, 1.0, 1.0])]
+
+
+def test_bolge_promptu_kisa_ve_tek_parca():
+    from fotorobot.ozellikler import BOLGE_ORNEKLERI, bolge_promptu
+
+    for detay in BOLGE_ORNEKLERI.values():
+        poz, neg = bolge_promptu(detay)
+        assert poz.startswith(detay)
+        # CLIP tokenizer yok; kelime sayısı 75 token'ın çok altında kalmalı
+        assert len(poz.replace(",", " ").split()) < 40
+    assert bolge_promptu("  scar ,  ")[0].startswith("scar, RAW photo")
+
+
+def test_editor_ayir_maskeyi_katmanlardan_cikarir():
+    from PIL import Image
+
+    from fotorobot.arayuz import editor_ayir
+
+    arka = Image.new("RGB", (64, 80), "grey")
+    katman = Image.new("RGBA", (64, 80), (0, 0, 0, 0))
+    katman.paste((255, 0, 0, 255), (10, 20, 18, 26))
+    gorsel, maske = editor_ayir({"background": arka, "layers": [katman], "composite": arka})
+    assert gorsel.size == (64, 80)
+    assert maske.getbbox() == (10, 20, 18, 26)
+    assert set(maske.getdata()) == {0, 255}
+
+    # Farklı boyutlu katman arka plana ölçeklenir
+    kucuk = katman.resize((32, 40), Image.NEAREST)
+    _, maske = editor_ayir({"background": arka, "layers": [kucuk]})
+    assert maske.size == (64, 80) and maske.getbbox() is not None
+
+
+def test_editor_ayir_bos():
+    from PIL import Image
+
+    from fotorobot.arayuz import editor_ayir
+
+    arka = Image.new("RGB", (32, 32))
+    assert editor_ayir(None) == (None, None)
+    gorsel, maske = editor_ayir({"background": arka, "layers": [Image.new("RGBA", (32, 32))]})
+    assert gorsel is not None and maske is None
+
+
+def test_arayuz_modelsiz_kurulur():
+    from types import SimpleNamespace
+
+    from fotorobot.arayuz import Uygulama
+    from fotorobot.config import Ayarlar
+
+    motor = SimpleNamespace(hazir=False, ayarlar=Ayarlar(), durum_notlari=[])
+    gemini = SimpleNamespace(hazir=False)
+    demo = Uygulama(motor, gemini=gemini).olustur()
+    assert demo is not None

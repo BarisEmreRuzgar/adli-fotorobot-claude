@@ -298,6 +298,35 @@ def prompt_olustur(oz, onceki=None, referans=None):
     return pozitif, ", ".join(dict.fromkeys(negatif))
 
 
+# Aşama 3 (bölgesel ayrıntı) için hazır ayrıntılar: Türkçe etiket → İngilizce prompt
+BOLGE_ORNEKLERI = {
+    "Yara izi": "thin pale healed scar on the skin",
+    "Ben": "small dark brown mole on the skin",
+    "Halka küpe": "small silver hoop earring on the earlobe",
+    "Dövme": "small black ink tattoo on the skin",
+    "Çil": "freckles on the skin",
+    "Derin kırışıklık": "deep wrinkles in the skin",
+    "Kırık burun kemeri": "crooked nose bridge, previously broken nose",
+}
+
+
+def bolge_promptu(detay):
+    """Aşama 3 için kısa (pozitif, negatif) prompt çifti.
+
+    Yalnızca maskelenen bölge yeniden çizildiği için prompt o bölgeyi
+    tarif eder; yüzün geri kalanını anlatmaya gerek yoktur ve kısa prompt
+    77 token'lık tek parçada kalır.
+    """
+    detay = " ".join((detay or "").split()).strip(" ,.")
+    pozitif = ", ".join(p for p in [
+        detay, "RAW photo, close-up of human skin, photorealistic",
+        "natural skin texture, sharp focus, even studio lighting",
+    ] if p)
+    negatif = ("worst quality, low quality, blurry, jpeg artifacts, cartoon, painting, drawing, "
+               "3d render, deformed, text, watermark, makeup")
+    return pozitif, negatif
+
+
 def ozet_metni(oz):
     """Raporlarda gösterilecek okunabilir özet."""
     satirlar = []

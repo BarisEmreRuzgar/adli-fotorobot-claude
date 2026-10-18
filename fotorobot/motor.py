@@ -24,6 +24,9 @@ FACEID_ADAPTOR = "faceid_0"
 YUZ_MODULLERI = ["detection", "recognition", "genderage"]
 # Saç değişikliğinde kimlik kırpıntısının griye boyanan üst oranı
 SAC_MASKE_ORANI = 0.3
+# Aşama 3: maskenin çevresinde bağlam için bırakılan pay ve maske kenar yumuşatması (piksel)
+BOLGE_KENARI = 48
+BOLGE_BULANIKLIGI = 4
 
 
 def _log(cb, mesaj):
@@ -84,6 +87,7 @@ class Motor:
         self.dtype = None
         self.pipe = None
         self.pipe_i2i = None
+        self.pipe_inp = None
         self.yuz_app = None
         self._ip_islemcileri = None
         self._ip_proj = None
@@ -98,6 +102,7 @@ class Motor:
             AutoencoderKL,
             DPMSolverMultistepScheduler,
             StableDiffusionImg2ImgPipeline,
+            StableDiffusionInpaintPipeline,
             StableDiffusionPipeline,
         )
         from transformers import CLIPVisionModelWithProjection
@@ -173,8 +178,13 @@ class Motor:
         self.pipe = pipe
         self.pipe_i2i = StableDiffusionImg2ImgPipeline(**pipe.components)
         self.pipe_i2i.set_progress_bar_config(disable=True)
+        # Aşama 3: aynı bileşenler, ayrı model indirilmez. 4 kanallı UNet ile
+        # diffusers maskenin dışını her adımda kaynak görüntüyle karıştırır.
+        self.pipe_inp = StableDiffusionInpaintPipeline(**pipe.components)
+        self.pipe_inp.set_progress_bar_config(disable=True)
         if self.cihaz == "cuda" and self.ayarlar.dusuk_vram:
             self.pipe_i2i.enable_model_cpu_offload()
+            self.pipe_inp.enable_model_cpu_offload()
 
         self.hazir = True
         _log(ilerleme, f"🎉 Tüm modeller hazır ({time.time() - t0:.0f} sn).")
@@ -430,3 +440,49 @@ class Motor:
             sonuclar.append((cikti, t, benzerlik))
         self._bellek_temizle()
         return sonuclar, kirpik
+
+    # ── Aşama 3 ────────────────────────────────────────────────────────
+
+    def bolge_duzenle(self, kaynak, maske, pozitif, negatif, adet=3, tohum=-1, adim=30, cfg=6.0,
+                      guc=0.75, kenar=BOLGE_KENARI, ilerleme=None):
+        """Yalnızca maskelenen bölgeyi yeniden çizer (yara izi, ben, küpe gibi küçük ayrıntılar).
+
+        Maskenin çevresi `kenar` piksel payla kırpılıp 512 piksele büyütülür,
+        orada çizilir ve kaynağa geri yapıştırılır; böylece küçük ayrıntılar tam
+        çözünürlükte üretilir, maskenin dışı piksel piksel korunur.
+        Dönüş: [(PIL görsel, tohum, benzerlik), ...]; benzerlik kaynağa göredir.
+        """
+        import torch
+
+        kaynak = kaynak.convert("RGB")
+        maske = maske.convert("L")
+        if maske.size != kaynak.size:
+            maske = maske.resize(kaynak.size, Image.NEAREST)
+        if maske.getbbox() is None:
+            raise ValueError("Maske boş: değişecek bölgeyi fırçayla boyayın.")
+        maske = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE_BULANIKLIGI)
+        yuz = self.yuz_bul(kaynak)
+
+        poz_emb, neg_emb = self._prompt_kodla(pozitif, negatif)
+        sonuclar = []
+        with self._ip_adapter_kapali():
+            for i, t in enumerate(self._tohumlar(tohum, adet)):
+                if ilerleme:
+                    ilerleme(i / adet, f"Varyasyon {i + 1}/{adet} üretiliyor...")
+                gen = torch.Generator("cpu").manual_seed(t)
+                with torch.inference_mode():
+                    cikti = self.pipe_inp(
+                        prompt_embeds=poz_emb,
+                        negative_prompt_embeds=neg_emb,
+                        image=kaynak, mask_image=maske,
+                        strength=float(guc), padding_mask_crop=int(kenar),
+                        width=512, height=512,
+                        # strength adım sayısını kısaltır; kaliteyi korumak için telafi et
+                        num_inference_steps=max(adim, int(round(adim / max(float(guc), 0.2)))),
+                        guidance_scale=cfg,
+                        generator=gen,
+                    ).images[0]
+                benzerlik = self.kimlik_benzerligi(None, cikti, yuz_a=yuz) if yuz is not None else None
+                sonuclar.append((cikti, t, benzerlik))
+        self._bellek_temizle()
+        return sonuclar

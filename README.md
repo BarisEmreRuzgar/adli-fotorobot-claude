@@ -38,6 +38,7 @@ Sistem tanık ifadesini analiz ederek yüz özelliklerini (yaş, cinsiyet, saç,
 | 📏 **Kimlik benzerlik skoru** | Her düzenlenmiş sonuç için ArcFace benzerliği gösterilir |
 | 🔁 **Art arda düzenleme** | Sonucu yeni kaynak yapma, geçmiş ve geri alma; kimlik her zaman ilk yüzden alınır (kayma olmaz) |
 | 📤 **Fotoğraf yükleme** | Aşama 2'ye kendi fotoğrafınızı yükleyip düzenleyebilirsiniz |
+| 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar fırçayla seçilen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
 | 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum ve benzerlikler `ciktilar/` altına yazılır; ZIP olarak indirilebilir |
 | 💾 **Düşük VRAM desteği** | 6 GB GPU'larda çalışır; daha düşük bellekte otomatik CPU offload |
 
@@ -89,6 +90,13 @@ python app.py               # --share: herkese açık bağlantı, --low-vram: d�
 2. **Kimlik koruma gücü** (varsayılan 0.6): yüksek değerde yüz yapısı daha sıkı korunur ama değişiklikler zayıflar. Testlerde 0.8'de gözlük eklenemedi; 0.4'te ise yaşlandırma güçlü ama kimlik %50'ye düştü.
 3. **Değişim miktarı** (varsayılan 0.8): düşük değerde poz ve ışık korunur, `1.0` değerinde poz da yeniden üretilir.
 4. Beğendiğiniz sonucu **↪️ yeni kaynak yap** ile seçip bir sonraki değişikliğe geçin.
+5. Yara izi, ben, küpe gibi küçük ayrıntılar için sonucu **➡️ Aşama 3'e gönder**.
+
+**Aşama 3: Bölgesel ayrıntı**
+1. Ayrıntının olacağı bölgeyi fırçayla boyayın (örneğin sol kaşın üstü).
+2. **Hazır ayrıntı** listesinden seçin veya İngilizce yazın (`thin pale healed scar on the skin`).
+3. **🖌️ Bölgeyi yeniden çiz**: yalnızca boyanan bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
+4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi boyayın. Maskeler de vaka kaydına yazılır.
 
 ---
 
@@ -101,7 +109,7 @@ fotorobot/
   ├─ ozellikler.py      → özellik şeması, doğrulama ve prompt üretimi
   ├─ kural_analiz.py    → Gemini'siz Türkçe ifade ve komut analizcisi
   ├─ gemini.py          → Gemini analizi (JSON çıktı, model yedekleme, otomatik geri dönüş)
-  ├─ motor.py           → model yükleme, Aşama 1/2 üretimi, kimlik benzerliği
+  ├─ motor.py           → model yükleme, Aşama 1/2/3 üretimi, kimlik benzerliği
   ├─ kayit.py           → vaka kaydı (PNG + JSON + ZIP)
   └─ arayuz.py          → Gradio arayüzü
 tests/                  → GPU gerektirmeyen birim testleri (python -m pytest)

@@ -9,7 +9,8 @@ from .config import Ayarlar, api_anahtari_bul
 from .gemini import Gemini
 from .kayit import VakaKaydi, gorsel_ac, yeni_vaka_id
 from .ozellikler import (
-    ALAN_ETIKETLERI, ALANLAR, normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler,
+    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, bolge_promptu, normalize, ozet_metni, prompt_olustur,
+    varsayilan_ozellikler,
 )
 
 ORNEK_IFADELER = [
@@ -73,6 +74,26 @@ def tablodan_oz(tablo, temel=None):
             deger = ""
         ham[alan] = deger
     return normalize(ham, temel=temel)
+
+
+def editor_ayir(deger):
+    """gr.ImageEditor değerinden (arka plan, maske) çıkarır; maske fırça katmanlarının birleşimidir.
+
+    Boyanmış hiçbir piksel yoksa maske None döner.
+    """
+    from PIL import Image, ImageChops
+
+    if not deger or deger.get("background") is None:
+        return None, None
+    arka = gorsel_ac(deger["background"])
+    maske = Image.new("L", arka.size, 0)
+    for katman in deger.get("layers") or []:
+        katman = katman if isinstance(katman, Image.Image) else Image.open(katman)
+        alfa = katman.convert("RGBA").getchannel("A")
+        if alfa.size != arka.size:
+            alfa = alfa.resize(arka.size, Image.NEAREST)
+        maske = ImageChops.lighter(maske, alfa.point(lambda p: 255 if p > 0 else 0))
+    return arka, (maske if maske.getbbox() else None)
 
 
 def _hata_metni(e):
@@ -297,6 +318,66 @@ class Uygulama:
         return (son["yol"], oz_tablo(son["oz"]), "↩️ Bir önceki kaynağa dönüldü.",
                 gecmis, self._gecmis_galeri(gecmis))
 
+    def asama3e_gonder(self, liste, secili, kaynak):
+        """Aşama 2'de seçili sonucu (seçim yoksa kaynağı) Aşama 3'ün editörüne aktarır."""
+        if liste and secili is not None and secili < len(liste):
+            yol, mesaj = liste[secili]["yol"], f"✅ Varyasyon {secili + 1} Aşama 3'e aktarıldı."
+        elif kaynak:
+            yol, mesaj = kaynak, "✅ Düzenlenen yüz Aşama 3'e aktarıldı."
+        else:
+            return gr.update(), "❌ Önce bir yüz seçin veya yükleyin.", gr.update()
+        return {"background": yol, "layers": [], "composite": yol}, mesaj, gr.Tabs(selected=2)
+
+    # ── Aşama 3 ───────────────────────────────────────────────────────
+
+    def bolge_duzenle(self, editor, detay, vaka_id, guc, adet, adim, cfg, tohum, progress=gr.Progress()):
+        kaynak_pil, maske = editor_ayir(editor)
+        if kaynak_pil is None:
+            return [], [], "❌ Önce bir yüz gönderin veya yükleyin.", vaka_id
+        if maske is None:
+            return [], [], "❌ Değişecek bölgeyi fırçayla boyayın.", vaka_id
+        if not (detay or "").strip():
+            return [], [], "❌ Eklenecek ayrıntıyı yazın veya listeden seçin.", vaka_id
+        if not self.motor.hazir:
+            return [], [], "❌ Modeller yüklenemedi.", vaka_id
+        pozitif, negatif = bolge_promptu(detay)
+        vaka_id = vaka_id or yeni_vaka_id()
+        kayit = self._kayit(vaka_id)
+        maske_yol = kayit.gorsel_kaydet(maske, "asama3_maske", {"detay": detay})
+        try:
+            sonuclar = self.motor.bolge_duzenle(
+                kaynak_pil, maske, pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim),
+                cfg=float(cfg), guc=float(guc), ilerleme=lambda o, m: progress(o, desc=m),
+            )
+        except Exception as e:  # noqa: BLE001
+            return [], [], _hata_metni(e), vaka_id
+        galeri, liste = [], []
+        for i, (gorsel, t, benzerlik) in enumerate(sonuclar):
+            b = "yüz bulunamadı" if benzerlik is None else f"%{benzerlik * 100:.0f}"
+            yol = kayit.gorsel_kaydet(gorsel, f"asama3_v{i + 1}", {
+                "prompt": pozitif, "negatif": negatif, "tohum": t, "detay": detay, "guc": float(guc),
+                "kimlik_benzerligi": benzerlik,
+            })
+            galeri.append((yol, f"Varyasyon {i + 1} · kimlik benzerliği {b}"))
+            liste.append({"yol": yol, "tohum": t})
+        kayit.olay_ekle("asama3_bolge_duzenleme", {
+            "detay": detay, "prompt": pozitif, "guc": float(guc), "maske": maske_yol,
+            "tohumlar": [t for _, t, _ in sonuclar], "benzerlikler": [b for _, _, b in sonuclar],
+            "gorseller": [x["yol"] for x in liste],
+        })
+        rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}",
+                 "ℹ️ Maskenin dışı değişmez; kimlik benzerliği kaynağa göredir.", "", "Prompt:", pozitif]
+        return galeri, liste, "\n".join(rapor), vaka_id
+
+    @staticmethod
+    def bolge_yeni_kaynak(liste, secili):
+        if not liste:
+            return gr.update(), "❌ Önce bölge düzenlemesi yapın."
+        i = secili if secili is not None and secili < len(liste) else 0
+        yol = liste[i]["yol"]
+        return ({"background": yol, "layers": [], "composite": yol},
+                f"✅ Varyasyon {i + 1} yeni kaynak oldu. Sıradaki bölgeyi boyayabilirsiniz.")
+
     def zip_indir(self, vaka_id):
         if not vaka_id:
             return gr.update(value=None, visible=False), "ℹ️ Henüz kayıt yok."
@@ -322,6 +403,8 @@ class Uygulama:
             s2_secili = gr.State(None)
             kimlik_ref = gr.State(None)
             gecmis = gr.State([])
+            s3_liste = gr.State([])
+            s3_secili = gr.State(None)
 
             with gr.Accordion("⚙️ Ayarlar", open=False):
                 with gr.Row():
@@ -407,11 +490,49 @@ class Uygulama:
                                     btn_yeni_kaynak = gr.Button("↪️ Seçili sonucu yeni kaynak yap "
                                                                 "(art arda düzenleme)", variant="secondary")
                                     btn_geri = gr.Button("↩️ Önceki kaynağa dön")
+                                    btn_asama3 = gr.Button("➡️ Seçili sonucu Aşama 3'e gönder "
+                                                           "(yara izi, ben, küpe...)")
                                     duzenle_durum = gr.Markdown()
                             galeri_gecmis = gr.Gallery(label="🕓 Düzenleme geçmişi", columns=6, height=180,
                                                        object_fit="contain", preview=False)
 
-                with gr.Tab("📁 Vaka Kaydı", id=2):
+                with gr.Tab("3️⃣ Bölgesel Ayrıntı", id=2):
+                    gr.Markdown(
+                        "Yara izi, ben, küpe gibi **küçük ve yeri belli** ayrıntılar için: değişecek bölgeyi "
+                        "fırçayla boyayın, ayrıntıyı seçin. Yalnızca boyanan bölge yeniden çizilir, yüzün geri "
+                        "kalanı aynen korunur. Birden fazla ayrıntı için sonucu yeni kaynak yapıp devam edin."
+                    )
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            editor = gr.ImageEditor(
+                                label="🖌️ Değişecek bölgeyi boyayın", type="pil", height=480,
+                                sources=["upload", "clipboard"], transforms=(), layers=False,
+                                brush=gr.Brush(colors=["#ff3b30"], color_mode="fixed", default_size=12),
+                                eraser=gr.Eraser(default_size=12),
+                            )
+                            hazir_detay = gr.Dropdown(list(BOLGE_ORNEKLERI), label="Hazır ayrıntı",
+                                                      value=None)
+                            detay = gr.Textbox(label="✏️ Eklenecek ayrıntı (İngilizce)", lines=2,
+                                               placeholder="thin pale healed scar on the skin")
+                            with gr.Row():
+                                guc3 = gr.Slider(0.4, 1.0, value=0.75, step=0.05,
+                                                 label="Değişim gücü (yüksek = ayrıntı daha belirgin)")
+                                adet3 = gr.Slider(1, 6, value=3, step=1, label="Varyasyon sayısı")
+                            btn_bolge = gr.Button("🖌️ Bölgeyi yeniden çiz", variant="primary", size="lg")
+                            rapor3 = gr.Textbox(label="📋 Rapor", lines=6, interactive=False,
+                                                elem_classes="rapor")
+                        with gr.Column(scale=2):
+                            galeri3 = gr.Gallery(label="🖼️ Sonuçlar — birini seçin", columns=3,
+                                                 height=400, object_fit="contain", preview=False)
+                            with gr.Row():
+                                secilen3 = gr.Image(label="✅ Seçilen sonuç", height=300, interactive=False,
+                                                    type="filepath")
+                                with gr.Column():
+                                    btn_bolge_kaynak = gr.Button("↪️ Seçili sonucu yeni kaynak yap "
+                                                                 "(başka ayrıntı ekle)", variant="secondary")
+                                    bolge_durum = gr.Markdown()
+
+                with gr.Tab("📁 Vaka Kaydı", id=3):
                     gr.Markdown(
                         "Üretilen tüm görseller ve işlem raporu (ifade, özellikler, prompt, tohumlar, kimlik "
                         "benzerlikleri) vaka klasörüne kaydedilir. Aynı tohum ve ayarlarla sonuçlar yeniden "
@@ -449,6 +570,14 @@ class Uygulama:
             btn_yeni_kaynak.click(self.yeni_kaynak_yap, [s2_liste, s2_secili, gecmis],
                                   [kaynak, tablo2, duzenle_durum, gecmis, galeri_gecmis])
             btn_geri.click(self.geri_al, [gecmis], [kaynak, tablo2, duzenle_durum, gecmis, galeri_gecmis])
+            btn_asama3.click(self.asama3e_gonder, [s2_liste, s2_secili, kaynak],
+                             [editor, duzenle_durum, sekmeler])
+
+            hazir_detay.change(lambda k: BOLGE_ORNEKLERI.get(k, gr.update()), [hazir_detay], [detay])
+            btn_bolge.click(self.bolge_duzenle, [editor, detay, vaka_id, guc3, adet3, adim, cfg, tohum],
+                            [galeri3, s3_liste, rapor3, vaka_id])
+            galeri3.select(self.secim, [s3_liste], [secilen3, s3_secili])
+            btn_bolge_kaynak.click(self.bolge_yeni_kaynak, [s3_liste, s3_secili], [editor, bolge_durum])
 
             btn_zip.click(self.zip_indir, [vaka_id], [zip_dosya, zip_durum])
         return demo
