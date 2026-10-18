@@ -477,6 +477,8 @@ def test_yuz_bolge_maskesi():
     sac = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"sac"})) > 0
     assert sac[20, 256] and sac[300, 20] and not sac[300, 256]
     assert sac[500, 20] and not sac[620, 20] and not sac[620, 256]  # omuz/kıyafet korunur
+    alttaki = np.array(yuz_bolge_maskesi(kps + [0, 150], bbox + [0, 150, 0, 150], (512, 640), {"sac"})) > 0
+    assert alttaki[630, 20]  # çene resmin altına yakınsa kesim taşmaz
     birlesik = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz", "alt_yuz"})) > 0
     assert birlesik.sum() >= max(goz.sum(), alt.sum())
 

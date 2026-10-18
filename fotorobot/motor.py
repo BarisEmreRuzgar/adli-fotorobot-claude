@@ -101,7 +101,9 @@ def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
             ciz_sac = ImageDraw.Draw(sac)
             ciz_sac.ellipse((x0 + 0.04 * w, y0 + 0.1 * h, x1 - 0.04 * w, y1 + 0.05 * h), fill=0)
             # Omuz ve kıyafet saç değildir: çenenin biraz altından aşağısı korunur.
-            ciz_sac.rectangle((0, y1 + 0.3 * h, boyut[0], boyut[1]), fill=0)
+            kesim = y1 + 0.3 * h
+            if kesim < boyut[1]:
+                ciz_sac.rectangle((0, kesim, boyut[0], boyut[1]), fill=0)
             maske.paste(255, (0, 0), sac)
     return maske
 
