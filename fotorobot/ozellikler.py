@@ -49,8 +49,6 @@ YAS_ALT, YAS_UST = 14, 90
 # Ayırt edici izler küçük ayrıntılar olduğu için model tarafından kolayca yok sayılır
 IZ_AGIRLIGI = 1.3
 AKSESUAR_AGIRLIGI = 1.2
-# Aşama 2'de değişen özellikler
-DEGISIM_AGIRLIGI = 1.3
 
 _AGIRLIK_KALIBI = re.compile(r"\(([^():]+):\s*([0-9]*\.?[0-9]+)\)")
 
@@ -188,7 +186,7 @@ DEGISIM_ALANLARI = ("sac", "sakal", "goz", "aksesuar", "ozel", "ten", "kas", "yu
                     "dudak", "cene")
 
 
-def _aksesuar_vurgusu(aksesuar, agirlik=AKSESUAR_AGIRLIGI):
+def _aksesuar_vurgusu(aksesuar):
     parcalar = []
     for a in [p.strip() for p in aksesuar.split(",") if p.strip()]:
         if "glasses" in a and "sun" not in a:
@@ -199,42 +197,31 @@ def _aksesuar_vurgusu(aksesuar, agirlik=AKSESUAR_AGIRLIGI):
                             else f"wearing {a}, eyeglasses with clearly visible frames on the face")
         else:
             parcalar.append(f"wearing {a}")
-    return ", ".join(agirlikli(p, agirlik) for p in parcalar)
+    return ", ".join(agirlikli(p, AKSESUAR_AGIRLIGI) for p in parcalar)
 
 
 def _fark_vurgulari(oz, onceki, kadin):
-    """`onceki`den `oz`e değişen alanlar için (vurgular, negatifler).
-
-    Vurgular `DEGISIM_AGIRLIGI` ile ağırlıklandırılır: Aşama 2 görüntünün büyük
-    kısmını yeniden ürettiği için değişmeyen özellikler de prompt'ta kalmalı;
-    değişikliğin onlara karşı baskın gelmesini ağırlık sağlar.
-    """
+    """`onceki`den `oz`e değişen alanlar için (vurgular, negatifler)."""
     vurgular, negatifler = [], []
     for alan in DEGISIM_ALANLARI:
         if (oz.get(alan) or "") == (onceki.get(alan) or ""):
             continue
         if oz.get(alan):
-            vurgular.append(agirlikli(oz[alan], DEGISIM_AGIRLIGI) if alan != "aksesuar"
-                            else _aksesuar_vurgusu(oz[alan], DEGISIM_AGIRLIGI))
+            vurgular.append(oz[alan] if alan != "aksesuar" else _aksesuar_vurgusu(oz[alan]))
             if alan == "sac":
                 yeni_renk = [k for k in _yuzde_olmayan_kelimeler(oz[alan], onceki.get(alan))
                              if k in SAC_RENKLERI]
                 if yeni_renk:
-                    vurgular.append(agirlikli(f"dyed {' '.join(yeni_renk)} hair", DEGISIM_AGIRLIGI))
+                    vurgular.append(f"dyed {' '.join(yeni_renk)} hair")
         elif alan == "sakal" and not kadin:
-            vurgular.append(agirlikli("clean shaven", DEGISIM_AGIRLIGI))
+            vurgular.append("clean shaven")
         eski = _yuzde_olmayan_kelimeler(onceki.get(alan), oz.get(alan))
         if eski:
             ad = {"sac": "hair", "goz": "eyes", "ten": "skin"}.get(alan, "")
             negatifler.append(" ".join(eski + ([ad] if ad else [])))
     if oz["yas"] != onceki.get("yas") and _yas_gorunumu(oz["yas"]):
-        vurgular.append(agirlikli(_yas_gorunumu(oz["yas"]), DEGISIM_AGIRLIGI))
+        vurgular.append(_yas_gorunumu(oz["yas"]))
     return vurgular, negatifler
-
-
-def _agirliksiz(metin):
-    """Ağırlık işaretleri atılmış metin; aynı ifadenin tekrarını yakalamak için."""
-    return "".join(m for m, _ in agirliklari_ayir(metin))
 
 
 def prompt_olustur(oz, onceki=None, referans=None):
@@ -277,13 +264,11 @@ def prompt_olustur(oz, onceki=None, referans=None):
         "plain light grey background, even studio lighting",
         "sharp focus, photorealistic, highly detailed natural skin texture, 8k uhd, dslr",
     ]
-    # Vurgulanan bir özellik aşağıda ağırlıksız da geçer; ilk (vurgulu) hali kalır
-    tekil, gorulen = [], set()
+    tekil = []
     for p in parcalar:
         p = (p or "").strip()
-        if p and _agirliksiz(p) not in gorulen:
+        if p and p not in tekil:
             tekil.append(p)
-            gorulen.add(_agirliksiz(p))
     pozitif = ", ".join(tekil)
 
     negatif = eski_negatifler + [
