@@ -262,12 +262,14 @@ def degisiklik_bolgeleri(onceki, yeni):
         if alan == "cinsiyet" or (yeni.get(alan) or "") == (onceki.get(alan) or ""):
             continue
         if alan == "aksesuar":
-            # Eklenen ve kaldırılan aksesuarların ikisinin de bölgesi değişir
-            eski_b = _aksesuar_bolgeleri(onceki.get("aksesuar"))
-            yeni_b = _aksesuar_bolgeleri(yeni.get("aksesuar"))
-            if eski_b is None or yeni_b is None:
+            # Yalnızca eklenen veya kaldırılan aksesuarların bölgesi değişir; dokunulmayan
+            # (ör. gözlük çıkarılırken kalan küpe) bölgeye girmez
+            eski = {a.strip() for a in (onceki.get("aksesuar") or "").split(",") if a.strip()}
+            yeni_a = {a.strip() for a in (yeni.get("aksesuar") or "").split(",") if a.strip()}
+            degisen = _aksesuar_bolgeleri(", ".join(sorted(eski ^ yeni_a)))
+            if degisen is None:
                 return None
-            bolgeler |= eski_b | yeni_b
+            bolgeler |= degisen
         elif alan in ALAN_BOLGELERI:
             bolgeler.add(ALAN_BOLGELERI[alan])
         else:

@@ -478,3 +478,11 @@ def test_yuz_bolge_maskesi():
     assert sac[20, 256] and sac[300, 20] and not sac[300, 256]
     birlesik = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz", "alt_yuz"})) > 0
     assert birlesik.sum() >= max(goz.sum(), alt.sum())
+
+
+def test_degisiklik_bolgeleri_yalnizca_degisen_aksesuar(ornek_erkek):
+    from fotorobot.ozellikler import degisiklik_bolgeleri
+
+    once = dict(ornek_erkek, aksesuar="thin metal glasses, small silver hoop earring")
+    sonra = dict(ornek_erkek, aksesuar="small silver hoop earring")
+    assert degisiklik_bolgeleri(once, sonra) == {"goz"}
