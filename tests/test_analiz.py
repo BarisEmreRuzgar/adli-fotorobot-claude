@@ -328,3 +328,20 @@ def test_arayuz_modelsiz_kurulur():
     gemini = SimpleNamespace(hazir=False)
     demo = Uygulama(motor, gemini=gemini).olustur()
     assert demo is not None
+
+
+def test_sakalsiz_erkekte_erkeklik_vurgulanir(ornek_erkek):
+    from fotorobot.ozellikler import ERKEKLIK_AGIRLIGI
+
+    sakalli = dict(ornek_erkek, sakal="short full beard")
+    poz, neg = prompt_olustur(sakalli)
+    assert "masculine" not in poz and "androgynous" not in neg
+
+    # Sakal silinip saç sarıya boyandığında (kadınsılaşan durum) erkeklik vurgulanır
+    yeni, _ = degisiklik_uygula(sakalli, "sakalı temizle\nsaçları sarı yap")
+    poz, neg = prompt_olustur(yeni, onceki=sakalli, referans=sakalli)
+    assert f"(masculine male face, masculine facial features:{ERKEKLIK_AGIRLIGI:g})" in poz
+    assert "androgynous" in neg
+
+    kadin_poz, _ = prompt_olustur(varsayilan_ozellikler("female"))
+    assert "masculine" not in kadin_poz

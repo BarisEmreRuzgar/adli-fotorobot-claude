@@ -49,6 +49,9 @@ YAS_ALT, YAS_UST = 14, 90
 # Ayırt edici izler küçük ayrıntılar olduğu için model tarafından kolayca yok sayılır
 IZ_AGIRLIGI = 1.3
 AKSESUAR_AGIRLIGI = 1.2
+# Sakal, erkek yüzün en güçlü işaretidir; sakalsız (özellikle sakal silinip saç
+# sarıya boyanınca) yüzler kadınsılaşıyordu, bu yüzden erkeklik ayrıca vurgulanır
+ERKEKLIK_AGIRLIGI = 1.2
 
 _AGIRLIK_KALIBI = re.compile(r"\(([^():]+):\s*([0-9]*\.?[0-9]+)\)")
 
@@ -246,6 +249,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
             eski_negatifler += n
 
     parcalar = [f"RAW photo, frontal passport style portrait of a {_kisi_ifadesi(oz)}"]
+    if not kadin and not _sakal_var_mi(oz["sakal"]):
+        parcalar.append(agirlikli("masculine male face, masculine facial features", ERKEKLIK_AGIRLIGI))
     parcalar += vurgular
     # Yara izi, küpe, gözlük gibi ayırt edici izler ilk parçada kalsın diye öne alınır
     if oz["ozel"]:
@@ -288,6 +293,7 @@ def prompt_olustur(oz, onceki=None, referans=None):
         negatif.append("woman, female, feminine, makeup")
         if not _sakal_var_mi(oz["sakal"]):
             negatif.append("beard, mustache, stubble, goatee")
+            negatif.append("androgynous, feminine face, soft feminine features")
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
