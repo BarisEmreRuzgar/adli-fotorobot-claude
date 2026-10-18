@@ -297,7 +297,9 @@ def prompt_olustur(oz, onceki=None, referans=None):
             eski_negatifler += n
 
     parcalar = [f"RAW photo, frontal passport style portrait of a {_kisi_ifadesi(oz)}"]
-    if not kadin and not _sakal_var_mi(oz["sakal"]):
+    if not kadin:
+        # Yalnızca sakalsız yüzlerde değil: "siyah saç + beyaz sakal" testinde sakal
+        # tarif edildiği halde 4 yüzün 3'ü kadın çıktı (sakal çizilmeyince erkeklik kayboluyor)
         parcalar.append(agirlikli("masculine male face, masculine facial features", ERKEKLIK_AGIRLIGI))
     parcalar += vurgular
     # Prompt anlamsal bloklara ayrılır; her blok ayrı 77 token'lık parçada kodlanır
@@ -353,9 +355,9 @@ def prompt_olustur(oz, onceki=None, referans=None):
         negatif.append("man, male, beard, mustache, stubble")
     else:
         negatif.append("woman, female, feminine, makeup")
+        negatif.append("androgynous, feminine face, soft feminine features")
         if not _sakal_var_mi(oz["sakal"]):
             negatif.append("beard, mustache, stubble, goatee")
-            negatif.append("androgynous, feminine face, soft feminine features")
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
