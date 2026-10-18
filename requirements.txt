@@ -1,0 +1,19 @@
+# PyTorch bu listede yok: Colab'da hazır gelir, yerelde CUDA sürümünüze uygun
+# olanı ayrıca kurun (README'deki "Yerel kurulum" bölümüne bakın).
+diffusers==0.35.2
+transformers==4.57.1
+accelerate==1.11.0
+huggingface_hub==0.36.0
+safetensors>=0.4.3
+peft==0.17.1
+gradio==5.49.1
+google-genai==1.50.1
+onnxruntime-gpu==1.23.2
+onnx>=1.16
+opencv-python-headless>=4.9,<5
+scikit-image>=0.22
+scipy>=1.11
+tqdm
+requests
+Pillow>=10.0
+numpy>=1.26
