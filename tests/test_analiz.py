@@ -267,6 +267,25 @@ def test_iz_ve_aksesuar_agirlikli(ornek_erkek):
     assert f"(wearing thin metal glasses:{AKSESUAR_AGIRLIGI:g})" in poz
 
 
+def test_degisen_ozellik_agirlikli_ve_tekrarsiz(ornek_erkek):
+    from fotorobot.ozellikler import DEGISIM_AGIRLIGI, agirliklari_ayir
+
+    yeni, _ = degisiklik_uygula(ornek_erkek, "saçları sarı yap")
+    poz, _ = prompt_olustur(yeni, onceki=ornek_erkek, referans=ornek_erkek)
+    agirlikli = dict((m, a) for m, a in agirliklari_ayir(poz) if a != 1.0)
+    assert agirlikli.get(yeni["sac"]) == DEGISIM_AGIRLIGI
+    assert agirlikli.get("dyed blonde hair") == DEGISIM_AGIRLIGI
+    # Saç hem vurgu hem temel listede geçer; prompt'ta yalnızca bir kez olmalı
+    assert poz.count(yeni["sac"]) == 1
+
+
+def test_eklenen_aksesuar_ic_ice_agirlik_olmaz():
+    oz = varsayilan_ozellikler()
+    yeni = dict(oz, aksesuar="thin metal glasses")
+    poz, _ = prompt_olustur(yeni, onceki=oz)
+    assert "((" not in poz and poz.count("wearing thin metal glasses") == 1
+
+
 def test_agirlikli_parcala_agirliklari_tokenlara_tasir():
     from fotorobot.motor import agirlikli_parcala
 
