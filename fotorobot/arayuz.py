@@ -506,7 +506,9 @@ class Uygulama:
                         with gr.Column(scale=1):
                             editor = gr.ImageEditor(
                                 label="🖌️ Değişecek bölgeyi boyayın", type="pil", height=480,
-                                sources=["upload", "clipboard"], transforms=(), layers=False,
+                                # transforms=() Gradio 5.49'da programdan görsel verilince
+                                # editörü boş bırakıyor (hide_resize_ui hatası); varsayılan kalmalı
+                                sources=["upload", "clipboard"], layers=False,
                                 brush=gr.Brush(colors=["#ff3b30"], color_mode="fixed", default_size=12),
                                 eraser=gr.Eraser(default_size=12),
                             )
