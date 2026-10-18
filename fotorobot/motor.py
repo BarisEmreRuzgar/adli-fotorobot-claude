@@ -31,6 +31,36 @@ def _log(cb, mesaj):
         cb(mesaj)
 
 
+def token_parcala(ids, ayirici_id, uzunluk):
+    """Token listesini en fazla `uzunluk` token'lık parçalara böler.
+
+    Bölme virgül (`ayirici_id`) sınırlarından yapılır; böylece "thin metal frame
+    eyeglasses" gibi bir ifade iki parçaya ayrılıp anlamını kaybetmez. Tek
+    başına `uzunluk`tan uzun bir ifade mecburen ortasından bölünür.
+    """
+    ifadeler, gecerli = [], []
+    for t in ids:
+        gecerli.append(t)
+        if t == ayirici_id:
+            ifadeler.append(gecerli)
+            gecerli = []
+    if gecerli:
+        ifadeler.append(gecerli)
+
+    parcalar, parca = [], []
+    for ifade in ifadeler:
+        if len(parca) + len(ifade) > uzunluk and parca:
+            parcalar.append(parca)
+            parca = []
+        while len(ifade) > uzunluk:
+            parcalar.append(ifade[:uzunluk])
+            ifade = ifade[uzunluk:]
+        parca = parca + ifade
+    if parca or not parcalar:
+        parcalar.append(parca)
+    return parcalar
+
+
 class Motor:
     def __init__(self, ayarlar=None):
         self.ayarlar = ayarlar or Ayarlar()
@@ -187,24 +217,28 @@ class Motor:
         return getattr(self.pipe, "_execution_device", self.cihaz)
 
     def _prompt_kodla(self, pozitif, negatif):
-        """77 token sınırını aşan prompt'ları parçalara bölerek kodlar."""
+        """77 token sınırını aşan prompt'ları virgül sınırlarından parçalara bölerek kodlar."""
         import torch
 
         tok = self.pipe.tokenizer
         enc = self.pipe.text_encoder
         cihaz = self._calisma_cihazi()
-        parca = tok.model_max_length - 2  # BOS/EOS hariç
+        uzunluk = tok.model_max_length - 2  # BOS/EOS hariç
+        virgul = tok(",", add_special_tokens=False).input_ids[0]
 
-        def idler(metin):
-            return tok(metin, truncation=False, add_special_tokens=False).input_ids
+        def parcala(metin):
+            ids = tok(metin, truncation=False, add_special_tokens=False).input_ids
+            return token_parcala(ids, virgul, uzunluk)
 
-        poz, neg = idler(pozitif), idler(negatif)
-        parca_sayisi = max(1, -(-len(poz) // parca), -(-len(neg) // parca))
+        poz, neg = parcala(pozitif), parcala(negatif)
+        # Pozitif ve negatif gömüler aynı uzunlukta olmalı; kısa olan boş parçayla tamamlanır
+        parca_sayisi = max(len(poz), len(neg))
+        poz += [[]] * (parca_sayisi - len(poz))
+        neg += [[]] * (parca_sayisi - len(neg))
 
-        def kodla(ids):
+        def kodla(parcalar):
             gomuler = []
-            for i in range(parca_sayisi):
-                dilim = ids[i * parca:(i + 1) * parca]
+            for dilim in parcalar:
                 dilim = [tok.bos_token_id] + dilim + [tok.eos_token_id]
                 dilim += [tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id] * (
                     tok.model_max_length - len(dilim))

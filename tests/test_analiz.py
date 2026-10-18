@@ -189,3 +189,62 @@ def test_yas_gorunumu_promptta():
     oz["yas"] = 60
     poz, neg = prompt_olustur(oz)
     assert "wrinkled" in poz and "youthful" in neg
+
+
+def test_ayirt_edici_izler_promptun_basinda():
+    oz = varsayilan_ozellikler()
+    oz["ozel"] = "thin white scar above left eyebrow"
+    oz["aksesuar"] = "small silver hoop earring on right ear"
+    poz, _ = prompt_olustur(oz)
+    assert poz.index("scar") < poz.index(oz["ten"])
+    assert poz.index("hoop earring") < poz.index(oz["sac"])
+
+
+@pytest.mark.parametrize("gozluk, kalin_vurgu", [
+    ("thin rectangular metal frame eyeglasses", False),
+    ("rimless glasses", False),
+    ("thick black glasses", True),
+])
+def test_ince_gozluge_kalin_cerceve_vurgusu_eklenmez(gozluk, kalin_vurgu):
+    oz = varsayilan_ozellikler()
+    oz["aksesuar"] = gozluk
+    poz, _ = prompt_olustur(oz)
+    assert f"wearing {gozluk}" in poz
+    assert ("clearly visible frames" in poz) == kalin_vurgu
+
+
+VIRGUL = 0
+
+
+def test_token_parcala_virgulden_boler():
+    from fotorobot.motor import token_parcala
+
+    # ifadeler: [1,2,V] [3,4,5,V] [6,7]
+    ids = [1, 2, VIRGUL, 3, 4, 5, VIRGUL, 6, 7]
+    parcalar = token_parcala(ids, VIRGUL, 5)
+    assert parcalar == [[1, 2, VIRGUL], [3, 4, 5, VIRGUL], [6, 7]]
+    assert sum(parcalar, []) == ids
+
+
+def test_token_parcala_sigan_ifadeleri_birlestirir():
+    from fotorobot.motor import token_parcala
+
+    ids = [1, VIRGUL, 2, VIRGUL, 3, VIRGUL, 4]
+    assert token_parcala(ids, VIRGUL, 6) == [[1, VIRGUL, 2, VIRGUL, 3, VIRGUL], [4]]
+    assert token_parcala(ids, VIRGUL, 75) == [ids]
+
+
+def test_token_parcala_cok_uzun_ifadeyi_mecburen_boler():
+    from fotorobot.motor import token_parcala
+
+    ids = [9, VIRGUL] + list(range(1, 13)) + [VIRGUL, 8]
+    parcalar = token_parcala(ids, VIRGUL, 5)
+    assert all(len(p) <= 5 for p in parcalar)
+    assert sum(parcalar, []) == ids
+    assert parcalar[0] == [9, VIRGUL]
+
+
+def test_token_parcala_bos():
+    from fotorobot.motor import token_parcala
+
+    assert token_parcala([], VIRGUL, 75) == [[]]

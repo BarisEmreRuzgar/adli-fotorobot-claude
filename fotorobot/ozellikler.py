@@ -166,7 +166,10 @@ def _aksesuar_vurgusu(aksesuar):
     parcalar = []
     for a in [p.strip() for p in aksesuar.split(",") if p.strip()]:
         if "glasses" in a and "sun" not in a:
-            parcalar.append(f"wearing {a}, eyeglasses with clearly visible frames on the face")
+            # "Belirgin çerçeve" vurgusu ince/metal gözlükleri kalın kemik çerçeveye çeviriyor
+            ince = _iceriyor(a, "thin", "metal", "wire", "rimless", "frameless")
+            parcalar.append(f"wearing {a}" if ince
+                            else f"wearing {a}, eyeglasses with clearly visible frames on the face")
         else:
             parcalar.append(f"wearing {a}")
     return ", ".join(parcalar)
@@ -219,14 +222,15 @@ def prompt_olustur(oz, onceki=None, referans=None):
 
     parcalar = [f"RAW photo, frontal passport style portrait of a {_kisi_ifadesi(oz)}"]
     parcalar += vurgular
-    parcalar += [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
-    if not kadin:
-        parcalar.append(oz["sakal"] or "clean shaven")
-    parcalar += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
+    # Yara izi, küpe, gözlük gibi ayırt edici izler ilk parçada kalsın diye öne alınır
     if oz["ozel"]:
         parcalar.append(oz["ozel"])
     if oz["aksesuar"]:
         parcalar.append(_aksesuar_vurgusu(oz["aksesuar"]))
+    parcalar += [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+    if not kadin:
+        parcalar.append(oz["sakal"] or "clean shaven")
+    parcalar += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
     if not _iceriyor(oz["aksesuar"], "hoodie", "jacket", "suit", "shirt", "coat", "sweater"):
         parcalar.append("wearing a plain dark crew-neck t-shirt")
     parcalar += [
