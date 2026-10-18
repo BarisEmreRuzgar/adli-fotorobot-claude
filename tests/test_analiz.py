@@ -352,3 +352,24 @@ def test_sari_sac_yellow_yazilsa_da_blonde_olur(ornek_erkek):
     assert oz["sac"] == "short blonde hair with receding hairline"
     poz, _ = prompt_olustur(oz, onceki=ornek_erkek)
     assert "dyed blonde hair" in poz
+
+
+def test_gemini_atlanan_model_rapora_yazilir():
+    from types import SimpleNamespace
+
+    from fotorobot.gemini import Gemini
+
+    def uret(model, contents, config):
+        if model == "ana":
+            raise RuntimeError("429 RESOURCE_EXHAUSTED. Quota exceeded")
+        if model == "ikinci":
+            raise RuntimeError("404 NOT_FOUND. models/ikinci is not found")
+        return SimpleNamespace(text='{"cinsiyet": "male", "yas": 30}')
+
+    g = Gemini("deneme-anahtari", ["ana", "ikinci", "yedek"])
+    g._istemci = SimpleNamespace(models=SimpleNamespace(generate_content=uret))
+    _, rapor = g.ifade_analiz("30 yaşında bir erkek")
+    metin = "\n".join(rapor)
+    assert "(yedek)" in metin
+    assert "ana → kota / istek sınırı doldu (429)" in metin
+    assert "ikinci → model bulunamadı (404)" in metin

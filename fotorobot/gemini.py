@@ -79,11 +79,26 @@ def _json_ayikla(metin):
         raise
 
 
+def _hata_ozeti(mesaj):
+    """API hata metninden kullanıcıya gösterilecek kısa neden."""
+    m = mesaj.upper()
+    if "429" in m or "RESOURCE_EXHAUSTED" in m or "QUOTA" in m:
+        return "kota / istek sınırı doldu (429)"
+    if "404" in m or "NOT_FOUND" in m:
+        return "model bulunamadı (404), adı değişmiş olabilir"
+    if "403" in m or "PERMISSION_DENIED" in m:
+        return "bu modele erişim izni yok (403)"
+    if "503" in m or "UNAVAILABLE" in m or "OVERLOADED" in m:
+        return "model geçici olarak yoğun (503)"
+    return mesaj[:120]
+
+
 class Gemini:
     def __init__(self, api_anahtari="", modeller=("gemini-2.5-flash",)):
         self.modeller = list(modeller)
         self._istemci = None
         self.son_hata = ""
+        self.atlanan_modeller = []
         self.anahtar_ayarla(api_anahtari)
 
     def anahtar_ayarla(self, api_anahtari):
@@ -109,6 +124,7 @@ class Gemini:
             temperature=0.2,
         )
         hatalar = []
+        self.atlanan_modeller = []
         for model in self.modeller:
             for deneme in range(GECICI_HATA_DENEME):
                 try:
@@ -126,15 +142,21 @@ class Gemini:
                         time.sleep(2 * (deneme + 1))
                         continue
                     hatalar.append(f"{model}: {mesaj[:200]}")
+                    # Yedek modele sessizce geçilmesin: neden atlandığı rapora ve konsola yazılır
+                    self.atlanan_modeller.append(f"{model} → {_hata_ozeti(mesaj)}")
+                    print(f"⚠️ Gemini modeli atlandı: {model}: {mesaj[:300]}", flush=True)
                     break
         raise RuntimeError(" | ".join(hatalar))
+
+    def _atlanan_notu(self):
+        return [f"ℹ️ Atlanan model: {a}" for a in self.atlanan_modeller]
 
     def baglanti_testi(self):
         if not self.hazir:
             return False, "API anahtarı girilmedi"
         try:
             _, model = self._uret(['{"durum": "ok"} döndür'], "Sadece JSON döndür.")
-            return True, f"Gemini bağlantısı başarılı ({model})"
+            return True, "\n".join([f"Gemini bağlantısı başarılı ({model})"] + self._atlanan_notu())
         except Exception as e:  # noqa: BLE001
             return False, f"Gemini bağlantı hatası: {e}"
 
@@ -146,7 +168,7 @@ class Gemini:
             try:
                 ham, model = self._uret([f"Tanık ifadesi:\n{metin}"], IFADE_TALIMATI)
                 oz = normalize(ham)
-                rapor = [f"✅ Gemini analizi ({model})"]
+                rapor = [f"✅ Gemini analizi ({model})"] + self._atlanan_notu()
                 belirtilmeyen = [a for a in ham.get("belirtilmeyen", []) if a in ALANLAR] \
                     if isinstance(ham.get("belirtilmeyen"), list) else []
                 if belirtilmeyen:
@@ -172,7 +194,7 @@ class Gemini:
                 ham, model = self._uret([istek], DEGISIKLIK_TALIMATI)
                 yeni = normalize(ham, temel=oz)
                 uygulanan = ham.get("uygulanan") if isinstance(ham.get("uygulanan"), list) else []
-                rapor = [f"✅ Gemini değişikliği yorumladı ({model})"]
+                rapor = [f"✅ Gemini değişikliği yorumladı ({model})"] + self._atlanan_notu()
                 rapor += [f"   • {u}" for u in uygulanan]
                 return yeni, rapor
             except Exception as e:  # noqa: BLE001
