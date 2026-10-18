@@ -39,7 +39,8 @@ Sistem tanık ifadesini analiz ederek yüz özelliklerini (yaş, cinsiyet, saç,
 | 🔁 **Art arda düzenleme** | Sonucu yeni kaynak yapma, geçmiş ve geri alma; kimlik her zaman ilk yüzden alınır (kayma olmaz) |
 | 📤 **Fotoğraf yükleme** | Aşama 2'ye kendi fotoğrafınızı yükleyip düzenleyebilirsiniz |
 | 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar tıklanarak işaretlenen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
-| 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum ve benzerlikler `ciktilar/` altına yazılır; ZIP olarak indirilebilir |
+| 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum, maskeler ve benzerlikler `ciktilar/` altına yazılır; ZIP'te her dosyanın SHA-256 özeti (`manifest.sha256`) bulunur |
+| ⚠️ **YZ tahmini uyarısı** | Tanığın belirtmediği, modelin tamamladığı özellikler görselin üstünde ve vaka kaydında belirtilir |
 | 💾 **Düşük VRAM desteği** | 6 GB GPU'larda çalışır; daha düşük bellekte otomatik CPU offload |
 
 ---
@@ -82,13 +83,16 @@ python app.py               # --share: herkese açık bağlantı, --low-vram: d�
 
 **Aşama 1: Tanık ifadesi → Fotorobot**
 1. Tanık ifadesini yazın ve **⚡ Analiz et ve üret** düğmesine basın.
-2. Özellik tablosundaki değerleri isterseniz düzeltin, sonra **🎨 Tablodan üret** ile yeniden üretin.
-3. Galeriden şüpheliye en çok benzeyen yüzü seçip **➡️ Aşama 2'ye gönder** düğmesine basın.
+2. Galerinin üstündeki sarı bant, tanığın **belirtmediği** ve yapay zekânın tamamladığı özellikleri listeler (ör. burun, dudak). Bunlar tanığa ayrıca sorulmalıdır.
+3. Özellik tablosundaki değerleri isterseniz düzeltin, sonra **🎨 Tablodan üret** ile yeniden üretin.
+4. Galeriden şüpheliye en çok benzeyen yüzü seçip **➡️ Aşama 2'ye gönder** düğmesine basın.
+
+Aynı tanık ifadesi her seferinde aynı analizi verir: Gemini yanıtları `ciktilar/_gemini_onbellek.json` içinde saklanır (kota da harcanmaz). Prompt üç bloğa ayrılarak kodlanır (kafa + saç | yüz içi + sakal + izler | çekim koşulları); aynı bloktaki özelliklerin birbirine karışması azalır.
 
 **Aşama 2: Kimlik korumalı düzenleme**
 1. Her değişikliği ayrı satıra yazın, örneğin `sakalı temizle`, `kısa kare sakal ekle`, `gözler mavi olsun`, `gözlük ekle`, `saçları sarı yap`, `kel yap`, `10 yaş yaşlandır`.
-2. **Kimlik koruma gücü** (varsayılan 0.6): yüksek değerde yüz yapısı daha sıkı korunur ama değişiklikler zayıflar. Testlerde 0.8'de gözlük eklenemedi; 0.4'te ise yaşlandırma güçlü ama kimlik %50'ye düştü.
-3. **Değişim miktarı** (varsayılan 0.8): düşük değerde poz ve ışık korunur, `1.0` değerinde poz da yeniden üretilir.
+2. Değişiklik bir yüz bölgesine aitse (sakal → alt yüz, gözlük/göz/kaş → göz çevresi, küpe → kulaklar, saç/şapka → yüz ovalinin dışı, dudak, burun) **yalnızca o bölge** yeniden çizilir; yüzün geri kalanı, ışık ve arka plan aynen kalır. Yaş, ten, yüz şekli gibi bütünsel değişikliklerde tüm görüntü düzenlenir. Rapor hangi bölgenin çizildiğini yazar. Colab testinde bölgesel düzenleme kimlik benzerliğini gözlük çıkarmada %67'den %75'e, sakal silmede %61'den %66'ya çıkardı.
+3. **Yüz ne kadar aynı kalsın?** (varsayılan 0.6): yüksek değerde yüz yapısı daha sıkı korunur ama değişiklikler zayıflar. Değişiklik tutmazsa düşürün.
 4. Beğendiğiniz sonucu **↪️ yeni kaynak yap** ile seçip bir sonraki değişikliğe geçin.
 5. Yara izi, ben, küpe gibi küçük ayrıntılar için sonucu **➡️ Aşama 3'e gönder**.
 
