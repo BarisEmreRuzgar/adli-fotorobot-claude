@@ -66,6 +66,8 @@ class Ayarlar:
     inpaint_controlnet: str = _env("FOTOROBOT_INPAINT_CONTROLNET", "lllyasviel/control_v11p_sd15_inpaint")
     ip_lora: str = _env("FOTOROBOT_IP_LORA", "ip-adapter-faceid-plusv2_sd15_lora.safetensors")
     cikti_klasoru: Path = Path(_env("FOTOROBOT_OUTPUT_DIR", "ciktilar"))
+    # Aynı ifade/komut için Gemini yanıtını diskten kullan (kota + yeniden üretilebilirlik)
+    gemini_onbellek: bool = _env_bool("FOTOROBOT_GEMINI_CACHE", True)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

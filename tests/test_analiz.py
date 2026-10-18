@@ -435,3 +435,24 @@ def test_vaka_manifesti(tmp_path):
         assert ozetler["001_asama1_v1.png"] == hashlib.sha256(f.read()).hexdigest()
     import zipfile
     assert "vaka_deneme/manifest.sha256" in zipfile.ZipFile(zip_yolu).namelist()
+
+
+def test_gemini_onbellek_ayni_istegi_tekrar_gondermez(tmp_path):
+    from types import SimpleNamespace
+
+    from fotorobot.gemini import Gemini
+
+    cagri = []
+
+    def uret(model, contents, config):
+        cagri.append(model)
+        return SimpleNamespace(text='{"cinsiyet": "male", "yas": %d}' % (30 + len(cagri)))
+
+    g = Gemini("anahtar", ["m"], onbellek_yolu=tmp_path / "onbellek.json")
+    g._istemci = SimpleNamespace(models=SimpleNamespace(generate_content=uret))
+    oz1, rapor1, _ = g.ifade_analiz("bir erkek")
+    oz2, rapor2, _ = g.ifade_analiz("bir erkek")
+    assert len(cagri) == 1 and oz1 == oz2
+    assert "önbellekten" in rapor2[0]
+    g.ifade_analiz("başka bir erkek")
+    assert len(cagri) == 2

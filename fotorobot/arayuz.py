@@ -129,7 +129,11 @@ class Uygulama:
     def __init__(self, motor, ayarlar=None, gemini=None):
         self.motor = motor
         self.ayarlar = ayarlar or motor.ayarlar
-        self.gemini = gemini or Gemini(api_anahtari_bul(), self.ayarlar.gemini_modelleri)
+        self.gemini = gemini or Gemini(
+            api_anahtari_bul(), self.ayarlar.gemini_modelleri,
+            onbellek_yolu=(self.ayarlar.cikti_klasoru / "_gemini_onbellek.json")
+            if self.ayarlar.gemini_onbellek else None,
+        )
 
     # ── Ortak ─────────────────────────────────────────────────────────
 
