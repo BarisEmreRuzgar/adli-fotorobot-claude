@@ -554,7 +554,8 @@ class Uygulama:
                             bolge_onizleme = gr.Image(label="🖌️ Ayrıntının yerine tıklayın", type="pil",
                                                       height=480, interactive=False)
                             with gr.Row():
-                                yaricap = gr.Slider(3, 40, value=12, step=1, label="Fırça yarıçapı (piksel)")
+                                yaricap = gr.Slider(3, 40, value=9, step=1, label="Fırça yarıçapı (piksel)",
+                                                    info="Ayrıntı fırça kadar büyük çizilir")
                                 birlestir = gr.Checkbox(value=True, label="Noktaları çizgiyle birleştir")
                             with gr.Row():
                                 btn_nokta_sil = gr.Button("↩️ Son noktayı sil", size="sm")

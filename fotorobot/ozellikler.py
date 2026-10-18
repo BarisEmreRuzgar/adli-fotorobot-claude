@@ -379,10 +379,10 @@ BOLGE_ORNEKLERI = {
     "Derin kırışıklık": "deep wrinkles",
     "Kırık burun kemeri": "crooked nose bridge, previously broken nose",
 }
-# Ayrıntının ağırlığı. Colab testi (aynı kaynak/maske/tohum): "prominent dark brown mole
-# on the skin, RAW photo, close-up of human skin, ..." 0/3 ben çizdi; "(dark brown
-# mole:1.6), ..." 5/6. Cilt tarifleri modeli düz cilde itiyor, ağırlıksız nesne kayboluyor.
-BOLGE_AGIRLIGI = 1.6
+# Ayrıntının ağırlığı. Colab testi (aynı kaynak/maske/tohum, ben): cilt tarifli eski prompt
+# 0/3; ağırlık 1.2 → 1-2/5; 1.35 → 5/5 doğal ben (yarıçap 9); 1.6 → 6/6 ama iri, yara gibi.
+# Cilt tarifleri modeli düz cilde itiyor, ağırlıksız nesne kayboluyor.
+BOLGE_AGIRLIGI = 1.35
 
 
 def bolge_promptu(detay):
