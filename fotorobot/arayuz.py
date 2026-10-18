@@ -76,24 +76,32 @@ def tablodan_oz(tablo, temel=None):
     return normalize(ham, temel=temel)
 
 
-def editor_ayir(deger):
-    """gr.ImageEditor değerinden (arka plan, maske) çıkarır; maske fırça katmanlarının birleşimidir.
+def maske_ciz(boyut, noktalar, yaricap, birlestir=True):
+    """Tıklanan noktalardan maske çizer: her nokta bir daire, `birlestir` ise ardışık
+    noktalar fırça kalınlığında çizgiyle birleşir (yara izi gibi uzun ayrıntılar için).
 
-    Boyanmış hiçbir piksel yoksa maske None döner.
+    gr.ImageEditor yerine kullanılır: Gradio 5.49'un editörü programdan görsel
+    verilince ön yüzde yarış durumuna düşüp (hide_resize_ui) sayfayı bozuyordu.
     """
-    from PIL import Image, ImageChops
+    from PIL import Image, ImageDraw
 
-    if not deger or deger.get("background") is None:
-        return None, None
-    arka = gorsel_ac(deger["background"])
-    maske = Image.new("L", arka.size, 0)
-    for katman in deger.get("layers") or []:
-        katman = katman if isinstance(katman, Image.Image) else Image.open(katman)
-        alfa = katman.convert("RGBA").getchannel("A")
-        if alfa.size != arka.size:
-            alfa = alfa.resize(arka.size, Image.NEAREST)
-        maske = ImageChops.lighter(maske, alfa.point(lambda p: 255 if p > 0 else 0))
-    return arka, (maske if maske.getbbox() else None)
+    maske = Image.new("L", boyut, 0)
+    ciz = ImageDraw.Draw(maske)
+    r = max(1, int(yaricap))
+    for x, y in noktalar or []:
+        ciz.ellipse((x - r, y - r, x + r, y + r), fill=255)
+    if birlestir and noktalar and len(noktalar) > 1:
+        ciz.line([tuple(n) for n in noktalar], fill=255, width=2 * r)
+    return maske
+
+
+def maske_onizleme(kaynak, maske):
+    """Kaynağın üstüne maskeyi yarı saydam kırmızı olarak çizer."""
+    from PIL import Image
+
+    kaynak = kaynak.convert("RGB")
+    kirmizi = Image.new("RGB", kaynak.size, (255, 59, 48))
+    return Image.composite(kirmizi, kaynak, maske.point(lambda p: p * 55 // 100))
 
 
 def _hata_metni(e):
@@ -318,24 +326,42 @@ class Uygulama:
         return (son["yol"], oz_tablo(son["oz"]), "↩️ Bir önceki kaynağa dönüldü.",
                 gecmis, self._gecmis_galeri(gecmis))
 
-    def asama3e_gonder(self, liste, secili, kaynak):
-        """Aşama 2'de seçili sonucu (seçim yoksa kaynağı) Aşama 3'ün editörüne aktarır."""
+    @staticmethod
+    def asama3e_gonder(liste, secili, kaynak):
+        """Aşama 2'de seçili sonucu (seçim yoksa kaynağı) Aşama 3'ün kaynağı yapar."""
         if liste and secili is not None and secili < len(liste):
-            yol, mesaj = liste[secili]["yol"], f"✅ Varyasyon {secili + 1} Aşama 3'e aktarıldı."
-        elif kaynak:
-            yol, mesaj = kaynak, "✅ Düzenlenen yüz Aşama 3'e aktarıldı."
-        else:
-            return gr.update(), "❌ Önce bir yüz seçin veya yükleyin.", gr.update()
-        return {"background": yol, "layers": [], "composite": yol}, mesaj, gr.Tabs(selected=2)
+            return liste[secili]["yol"], f"✅ Varyasyon {secili + 1} Aşama 3'e aktarıldı."
+        if kaynak:
+            return kaynak, "✅ Düzenlenen yüz Aşama 3'e aktarıldı."
+        return gr.update(), "❌ Önce bir yüz seçin veya yükleyin."
 
     # ── Aşama 3 ───────────────────────────────────────────────────────
 
-    def bolge_duzenle(self, editor, detay, vaka_id, guc, adet, adim, cfg, tohum, progress=gr.Progress()):
-        kaynak_pil, maske = editor_ayir(editor)
+    @staticmethod
+    def bolge_onizle(yol, noktalar, yaricap, birlestir):
+        kaynak = gorsel_ac(yol)
+        if kaynak is None:
+            return None
+        return maske_onizleme(kaynak, maske_ciz(kaynak.size, noktalar, yaricap, birlestir))
+
+    def bolge_tikla(self, yol, noktalar, yaricap, birlestir, evt: gr.SelectData):
+        if not yol or evt.index is None:
+            return gr.update(), noktalar
+        noktalar = list(noktalar or []) + [[int(evt.index[0]), int(evt.index[1])]]
+        return self.bolge_onizle(yol, noktalar, yaricap, birlestir), noktalar
+
+    def bolge_son_nokta_sil(self, yol, noktalar, yaricap, birlestir):
+        noktalar = list(noktalar or [])[:-1]
+        return self.bolge_onizle(yol, noktalar, yaricap, birlestir), noktalar
+
+    def bolge_duzenle(self, yol, noktalar, yaricap, birlestir, detay, vaka_id, guc, adet, adim, cfg, tohum,
+                      progress=gr.Progress()):
+        kaynak_pil = gorsel_ac(yol)
         if kaynak_pil is None:
             return [], [], "❌ Önce bir yüz gönderin veya yükleyin.", vaka_id
-        if maske is None:
-            return [], [], "❌ Değişecek bölgeyi fırçayla boyayın.", vaka_id
+        if not noktalar:
+            return [], [], "❌ Ayrıntının olacağı yere görsel üzerinde tıklayın.", vaka_id
+        maske = maske_ciz(kaynak_pil.size, noktalar, yaricap, birlestir)
         if not (detay or "").strip():
             return [], [], "❌ Eklenecek ayrıntıyı yazın veya listeden seçin.", vaka_id
         if not self.motor.hazir:
@@ -374,9 +400,7 @@ class Uygulama:
         if not liste:
             return gr.update(), "❌ Önce bölge düzenlemesi yapın."
         i = secili if secili is not None and secili < len(liste) else 0
-        yol = liste[i]["yol"]
-        return ({"background": yol, "layers": [], "composite": yol},
-                f"✅ Varyasyon {i + 1} yeni kaynak oldu. Sıradaki bölgeyi boyayabilirsiniz.")
+        return liste[i]["yol"], f"✅ Varyasyon {i + 1} yeni kaynak oldu. Sıradaki bölgeyi işaretleyebilirsiniz."
 
     def zip_indir(self, vaka_id):
         if not vaka_id:
@@ -405,6 +429,8 @@ class Uygulama:
             gecmis = gr.State([])
             s3_liste = gr.State([])
             s3_secili = gr.State(None)
+            bolge_kaynak = gr.State(None)
+            bolge_noktalar = gr.State([])
 
             with gr.Accordion("⚙️ Ayarlar", open=False):
                 with gr.Row():
@@ -498,20 +524,23 @@ class Uygulama:
 
                 with gr.Tab("3️⃣ Bölgesel Ayrıntı", id=2):
                     gr.Markdown(
-                        "Yara izi, ben, küpe gibi **küçük ve yeri belli** ayrıntılar için: değişecek bölgeyi "
-                        "fırçayla boyayın, ayrıntıyı seçin. Yalnızca boyanan bölge yeniden çizilir, yüzün geri "
+                        "Yara izi, ben, küpe gibi **küçük ve yeri belli** ayrıntılar için: ayrıntının olacağı "
+                        "yere görsel üzerinde tıklayın (uzun bir iz için başından sonuna birkaç nokta; noktalar "
+                        "çizgiyle birleşir), ayrıntıyı seçin. Yalnızca işaretli bölge yeniden çizilir, yüzün geri "
                         "kalanı aynen korunur. Birden fazla ayrıntı için sonucu yeni kaynak yapıp devam edin."
                     )
                     with gr.Row():
                         with gr.Column(scale=1):
-                            editor = gr.ImageEditor(
-                                label="🖌️ Değişecek bölgeyi boyayın", type="pil", height=480,
-                                # transforms=() Gradio 5.49'da programdan görsel verilince
-                                # editörü boş bırakıyor (hide_resize_ui hatası); varsayılan kalmalı
-                                sources=["upload", "clipboard"], layers=False,
-                                brush=gr.Brush(colors=["#ff3b30"], color_mode="fixed", default_size=12),
-                                eraser=gr.Eraser(default_size=12),
-                            )
+                            bolge_onizleme = gr.Image(label="🖌️ Ayrıntının yerine tıklayın", type="pil",
+                                                      height=480, interactive=False)
+                            with gr.Row():
+                                yaricap = gr.Slider(3, 40, value=8, step=1, label="Fırça yarıçapı (piksel)")
+                                birlestir = gr.Checkbox(value=True, label="Noktaları çizgiyle birleştir")
+                            with gr.Row():
+                                btn_nokta_sil = gr.Button("↩️ Son noktayı sil", size="sm")
+                                btn_nokta_temizle = gr.Button("🧹 Temizle", size="sm")
+                                btn_bolge_yukle = gr.UploadButton("📤 Fotoğraf yükle", file_types=["image"],
+                                                                  type="filepath", size="sm")
                             hazir_detay = gr.Dropdown(list(BOLGE_ORNEKLERI), label="Hazır ayrıntı",
                                                       value=None)
                             detay = gr.Textbox(label="✏️ Eklenecek ayrıntı (İngilizce)", lines=2,
@@ -572,14 +601,29 @@ class Uygulama:
             btn_yeni_kaynak.click(self.yeni_kaynak_yap, [s2_liste, s2_secili, gecmis],
                                   [kaynak, tablo2, duzenle_durum, gecmis, galeri_gecmis])
             btn_geri.click(self.geri_al, [gecmis], [kaynak, tablo2, duzenle_durum, gecmis, galeri_gecmis])
-            btn_asama3.click(self.asama3e_gonder, [s2_liste, s2_secili, kaynak],
-                             [editor, duzenle_durum, sekmeler])
+            btn_asama3.click(self.asama3e_gonder, [s2_liste, s2_secili, kaynak], [bolge_kaynak, duzenle_durum]) \
+                .then(lambda: gr.Tabs(selected=2), None, [sekmeler])
+
+            # Kaynak değişince işaretler sıfırlanır ve görsel yeniden gösterilir
+            bolge_kaynak.change(lambda y: (gorsel_ac(y), []), [bolge_kaynak], [bolge_onizleme, bolge_noktalar])
+            btn_bolge_yukle.upload(lambda d: d, [btn_bolge_yukle], [bolge_kaynak])
+            bolge_onizleme.select(self.bolge_tikla, [bolge_kaynak, bolge_noktalar, yaricap, birlestir],
+                                  [bolge_onizleme, bolge_noktalar])
+            btn_nokta_sil.click(self.bolge_son_nokta_sil, [bolge_kaynak, bolge_noktalar, yaricap, birlestir],
+                                [bolge_onizleme, bolge_noktalar])
+            btn_nokta_temizle.click(lambda y: (gorsel_ac(y), []), [bolge_kaynak], [bolge_onizleme, bolge_noktalar])
+            for bilesen in (yaricap, birlestir):
+                bilesen.change(self.bolge_onizle, [bolge_kaynak, bolge_noktalar, yaricap, birlestir],
+                               [bolge_onizleme])
 
             hazir_detay.change(lambda k: BOLGE_ORNEKLERI.get(k, gr.update()), [hazir_detay], [detay])
-            btn_bolge.click(self.bolge_duzenle, [editor, detay, vaka_id, guc3, adet3, adim, cfg, tohum],
-                            [galeri3, s3_liste, rapor3, vaka_id])
+            btn_bolge.click(
+                self.bolge_duzenle,
+                [bolge_kaynak, bolge_noktalar, yaricap, birlestir, detay, vaka_id, guc3, adet3, adim, cfg, tohum],
+                [galeri3, s3_liste, rapor3, vaka_id],
+            )
             galeri3.select(self.secim, [s3_liste], [secilen3, s3_secili])
-            btn_bolge_kaynak.click(self.bolge_yeni_kaynak, [s3_liste, s3_secili], [editor, bolge_durum])
+            btn_bolge_kaynak.click(self.bolge_yeni_kaynak, [s3_liste, s3_secili], [bolge_kaynak, bolge_durum])
 
             btn_zip.click(self.zip_indir, [vaka_id], [zip_dosya, zip_durum])
         return demo

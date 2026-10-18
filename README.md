@@ -38,7 +38,7 @@ Sistem tanık ifadesini analiz ederek yüz özelliklerini (yaş, cinsiyet, saç,
 | 📏 **Kimlik benzerlik skoru** | Her düzenlenmiş sonuç için ArcFace benzerliği gösterilir |
 | 🔁 **Art arda düzenleme** | Sonucu yeni kaynak yapma, geçmiş ve geri alma; kimlik her zaman ilk yüzden alınır (kayma olmaz) |
 | 📤 **Fotoğraf yükleme** | Aşama 2'ye kendi fotoğrafınızı yükleyip düzenleyebilirsiniz |
-| 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar fırçayla seçilen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
+| 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar tıklanarak işaretlenen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
 | 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum ve benzerlikler `ciktilar/` altına yazılır; ZIP olarak indirilebilir |
 | 💾 **Düşük VRAM desteği** | 6 GB GPU'larda çalışır; daha düşük bellekte otomatik CPU offload |
 
@@ -93,10 +93,10 @@ python app.py               # --share: herkese açık bağlantı, --low-vram: d�
 5. Yara izi, ben, küpe gibi küçük ayrıntılar için sonucu **➡️ Aşama 3'e gönder**.
 
 **Aşama 3: Bölgesel ayrıntı**
-1. Ayrıntının olacağı bölgeyi fırçayla boyayın (örneğin sol kaşın üstü).
+1. Ayrıntının olacağı yere görsel üzerinde tıklayın (örneğin sol kaşın üstü). Uzun bir iz için başından sonuna birkaç noktaya tıklayın; noktalar fırça kalınlığında çizgiyle birleşir. İşaretli bölge kırmızı görünür.
 2. **Hazır ayrıntı** listesinden seçin veya İngilizce yazın (`thin pale healed scar on the skin`).
-3. **🖌️ Bölgeyi yeniden çiz**: yalnızca boyanan bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
-4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi boyayın. Maskeler de vaka kaydına yazılır.
+3. **🖌️ Bölgeyi yeniden çiz**: yalnızca işaretli bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
+4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi işaretleyin. Maskeler de vaka kaydına yazılır.
 
 ---
 

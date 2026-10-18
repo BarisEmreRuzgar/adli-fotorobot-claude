@@ -291,34 +291,31 @@ def test_bolge_promptu_kisa_ve_tek_parca():
     assert bolge_promptu("  scar ,  ")[0].startswith("scar, RAW photo")
 
 
-def test_editor_ayir_maskeyi_katmanlardan_cikarir():
+def test_maske_ciz_nokta_ve_cizgi():
+    from fotorobot.arayuz import maske_ciz
+
+    tek = maske_ciz((100, 120), [[50, 60]], 5)
+    assert tek.size == (100, 120) and tek.getbbox() == (45, 55, 56, 66)
+    assert set(tek.getdata()) <= {0, 255}
+
+    # Birleştirilen iki nokta arasındaki çizgi de maskelenir
+    cizgi = maske_ciz((100, 120), [[20, 60], [80, 60]], 4, birlestir=True)
+    ayri = maske_ciz((100, 120), [[20, 60], [80, 60]], 4, birlestir=False)
+    assert cizgi.getpixel((50, 60)) == 255 and ayri.getpixel((50, 60)) == 0
+
+
+def test_maske_ciz_bos_ve_onizleme():
     from PIL import Image
 
-    from fotorobot.arayuz import editor_ayir
+    from fotorobot.arayuz import maske_ciz, maske_onizleme
 
-    arka = Image.new("RGB", (64, 80), "grey")
-    katman = Image.new("RGBA", (64, 80), (0, 0, 0, 0))
-    katman.paste((255, 0, 0, 255), (10, 20, 18, 26))
-    gorsel, maske = editor_ayir({"background": arka, "layers": [katman], "composite": arka})
-    assert gorsel.size == (64, 80)
-    assert maske.getbbox() == (10, 20, 18, 26)
-    assert set(maske.getdata()) == {0, 255}
-
-    # Farklı boyutlu katman arka plana ölçeklenir
-    kucuk = katman.resize((32, 40), Image.NEAREST)
-    _, maske = editor_ayir({"background": arka, "layers": [kucuk]})
-    assert maske.size == (64, 80) and maske.getbbox() is not None
-
-
-def test_editor_ayir_bos():
-    from PIL import Image
-
-    from fotorobot.arayuz import editor_ayir
-
-    arka = Image.new("RGB", (32, 32))
-    assert editor_ayir(None) == (None, None)
-    gorsel, maske = editor_ayir({"background": arka, "layers": [Image.new("RGBA", (32, 32))]})
-    assert gorsel is not None and maske is None
+    assert maske_ciz((32, 32), [], 5).getbbox() is None
+    kaynak = Image.new("RGB", (32, 32), (0, 0, 255))
+    maske = maske_ciz((32, 32), [[16, 16]], 3)
+    onizleme = maske_onizleme(kaynak, maske)
+    assert onizleme.getpixel((0, 0)) == (0, 0, 255)
+    r, _, b = onizleme.getpixel((16, 16))
+    assert r > 100 and b < 255  # işaretli bölge kırmızıya döner
 
 
 def test_arayuz_modelsiz_kurulur():
