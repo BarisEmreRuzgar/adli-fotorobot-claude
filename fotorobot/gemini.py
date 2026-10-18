@@ -163,7 +163,7 @@ class Gemini:
     # ── Yüksek seviye işlemler ────────────────────────────────────────
 
     def ifade_analiz(self, metin):
-        """Dönüş: (özellikler, rapor satırları)."""
+        """Dönüş: (özellikler, rapor satırları, tanığın belirtmediği / tahmin edilen alanlar)."""
         if self.hazir:
             try:
                 ham, model = self._uret([f"Tanık ifadesi:\n{metin}"], IFADE_TALIMATI)
@@ -173,7 +173,7 @@ class Gemini:
                     if isinstance(ham.get("belirtilmeyen"), list) else []
                 if belirtilmeyen:
                     rapor.append("ℹ️ İfadede geçmeyen (tahmin edilen): " + ", ".join(belirtilmeyen))
-                return oz, rapor
+                return oz, rapor, belirtilmeyen
             except Exception as e:  # noqa: BLE001
                 self.son_hata = str(e)
                 rapor = [f"⚠️ Gemini kullanılamadı, kural tabanlı analiz yapıldı.\n   ({str(e)[:300]})"]
@@ -183,7 +183,7 @@ class Gemini:
         eksik = [a for a in ALANLAR if a not in bulunan]
         if eksik:
             rapor.append("ℹ️ İfadede bulunamayan (varsayılan kullanılan): " + ", ".join(eksik))
-        return oz, rapor
+        return oz, rapor, eksik
 
     def degisiklik(self, oz, metin):
         """Dönüş: (yeni özellikler, rapor satırları)."""

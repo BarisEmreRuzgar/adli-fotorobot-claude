@@ -79,6 +79,15 @@ def tablodan_oz(tablo, temel=None):
     return normalize(ham, temel=temel)
 
 
+def tahmin_uyarisi(alanlar):
+    """Tanığın belirtmediği, YZ'nin tamamladığı özellikler için görselin üstünde gösterilecek uyarı."""
+    adlar = [ALAN_ETIKETLERI[a] for a in ALANLAR if a in (alanlar or []) and a != "cinsiyet"]
+    if not adlar:
+        return ""
+    return ("⚠️ **Tanık tarafından belirtilmedi (YZ tahmini):** " + ", ".join(adlar)
+            + ". Bu özellikler tanığa ayrıca sorulmadan kesin kabul edilmemelidir.")
+
+
 def maske_ciz(boyut, noktalar, yaricap, birlestir=True):
     """Tıklanan noktalardan maske çizer: her nokta bir daire, `birlestir` ise ardışık
     noktalar fırça kalınlığında çizgiyle birleşir (yara izi gibi uzun ayrıntılar için).
@@ -156,12 +165,13 @@ class Uygulama:
     # ── Aşama 1 ───────────────────────────────────────────────────────
 
     def analiz_et(self, ifade):
+        """Dönüş: (tablo, rapor, özellikler, YZ tahmini uyarısı, tahmin edilen alanlar)."""
         if not (ifade or "").strip():
-            return gr.update(), "❌ Tanık ifadesi boş!", None
-        oz, rapor = self.gemini.ifade_analiz(ifade)
+            return gr.update(), "❌ Tanık ifadesi boş!", None, "", []
+        oz, rapor, tahmin = self.gemini.ifade_analiz(ifade)
         rapor.append("")
         rapor.append(ozet_metni(oz))
-        return oz_tablo(oz), "\n".join(rapor), oz
+        return oz_tablo(oz), "\n".join(rapor), oz, tahmin_uyarisi(tahmin), tahmin
 
     def uret(self, tablo, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
         if not self.motor.hazir:
@@ -191,11 +201,16 @@ class Uygulama:
         return galeri, liste, "\n".join(rapor), vaka_id
 
     def analiz_ve_uret(self, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
-        tablo, analiz_raporu, oz = self.analiz_et(ifade)
+        tablo, analiz_raporu, oz, uyari, tahmin = self.analiz_et(ifade)
         if oz is None:
-            return gr.update(), gr.update(), [], analiz_raporu, vaka_id
+            return gr.update(), gr.update(), [], analiz_raporu, vaka_id, uyari
         galeri, liste, uretim_raporu, vaka_id = self.uret(tablo, ifade, vaka_id, adet, adim, cfg, tohum, progress)
-        return tablo, galeri, liste, analiz_raporu + "\n\n" + uretim_raporu, vaka_id
+        if liste:
+            # Hangi özelliklerin tanıktan değil YZ'den geldiği vaka kaydında da dursun
+            self._kayit(vaka_id).olay_ekle("tanik_ifadesi_analizi", {
+                "tanik_ifadesi": ifade, "tahmin_edilen_alanlar": tahmin,
+            })
+        return tablo, galeri, liste, analiz_raporu + "\n\n" + uretim_raporu, vaka_id, uyari
 
     @staticmethod
     def secim(liste, evt: gr.SelectData):
@@ -462,6 +477,7 @@ class Uygulama:
                             rapor1 = gr.Textbox(label="📋 Rapor", lines=10, interactive=False,
                                                 elem_classes="rapor")
                         with gr.Column(scale=2):
+                            tahmin_bandi = gr.Markdown()
                             galeri1 = gr.Gallery(label="🖼️ Üretilen yüzler — birini seçin", columns=4,
                                                  height=430, object_fit="contain", preview=False)
                             with gr.Row():
@@ -592,9 +608,10 @@ class Uygulama:
             # ── Olaylar ──────────────────────────────────────────────
             btn_anahtar.click(self.anahtar_kaydet, [anahtar], [anahtar_durum, durum])
 
-            btn_analiz.click(lambda m: self.analiz_et(m)[:2], [ifade], [tablo1, rapor1])
+            btn_analiz.click(lambda m: [self.analiz_et(m)[i] for i in (0, 1, 3)], [ifade],
+                             [tablo1, rapor1, tahmin_bandi])
             btn_hepsi.click(self.analiz_ve_uret, [ifade, vaka_id, adet1, adim, cfg, tohum],
-                            [tablo1, galeri1, s1_liste, rapor1, vaka_id])
+                            [tablo1, galeri1, s1_liste, rapor1, vaka_id, tahmin_bandi])
             btn_uret.click(self.uret, [tablo1, ifade, vaka_id, adet1, adim, cfg, tohum],
                            [galeri1, s1_liste, rapor1, vaka_id])
             galeri1.select(self.secim, [s1_liste], [secilen1, s1_secili])

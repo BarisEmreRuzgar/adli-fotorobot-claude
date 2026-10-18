@@ -196,8 +196,25 @@ def test_ayirt_edici_izler_promptun_basinda():
     oz["ozel"] = "thin white scar above left eyebrow"
     oz["aksesuar"] = "small silver hoop earring on right ear"
     poz, _ = prompt_olustur(oz)
-    assert poz.index("scar") < poz.index(oz["ten"])
-    assert poz.index("hoop earring") < poz.index(oz["sac"])
+    from fotorobot.ozellikler import BLOK_AYIRICI
+
+    kafa, yuz_ici, cekim = poz.split(BLOK_AYIRICI)
+    # Saç kafa bloğunda; izler ve aksesuar yüz içi bloğunun başında, sakal/gözlerden önce
+    assert oz["sac"] in kafa and "scar" not in kafa
+    assert yuz_ici.startswith("(thin white scar")
+    assert yuz_ici.index("hoop earring") < yuz_ici.index(oz["goz"])
+    assert "portrait" in cekim
+
+
+def test_break_bloklari_ayri_parcada_kodlanir():
+    from fotorobot.motor import agirlikli_parcala
+
+    def tokenle(metin):
+        return [len(k) for k in metin.replace(",", " , ").split()]
+
+    parcalar = agirlikli_parcala("aa bb BREAK cc, (dd:1.5) BREAK ee", tokenle, 1, 75)
+    assert [p for p, _ in parcalar] == [[2, 2], [2, 1, 2], [2]]
+    assert parcalar[1][1] == [1.0, 1.0, 1.5]
 
 
 @pytest.mark.parametrize("gozluk, kalin_vurgu", [
@@ -368,7 +385,7 @@ def test_gemini_atlanan_model_rapora_yazilir():
 
     g = Gemini("deneme-anahtari", ["ana", "ikinci", "yedek"])
     g._istemci = SimpleNamespace(models=SimpleNamespace(generate_content=uret))
-    _, rapor = g.ifade_analiz("30 yaşında bir erkek")
+    _, rapor, _ = g.ifade_analiz("30 yaşında bir erkek")
     metin = "\n".join(rapor)
     assert "(yedek)" in metin
     assert "ana → kota / istek sınırı doldu (429)" in metin
@@ -389,3 +406,32 @@ def test_kirpma_kutusu_en_az_boyut_ve_sinirlar():
     # Büyük maske: maske + pay, görüntüden büyük olamaz
     k = kirpma_kutusu((0, 0, 500, 600), (512, 640), 48, 256)
     assert k[2] - k[0] == 512 and k[3] - k[1] == 512
+
+
+def test_tahmin_uyarisi():
+    from fotorobot.arayuz import tahmin_uyarisi
+
+    assert tahmin_uyarisi([]) == ""
+    assert tahmin_uyarisi(["cinsiyet"]) == ""
+    u = tahmin_uyarisi(["dudak", "burun", "bilinmeyen"])
+    assert "Burun, Dudak" in u and "YZ tahmini" in u
+
+
+def test_vaka_manifesti(tmp_path):
+    import hashlib
+
+    from PIL import Image
+
+    from fotorobot.kayit import VakaKaydi
+
+    kayit = VakaKaydi(tmp_path, "vaka_deneme")
+    yol = kayit.gorsel_kaydet(Image.new("RGB", (8, 8)), "asama1_v1", {"tohum": 1})
+    kayit.olay_ekle("deneme", {"a": 1})
+    zip_yolu = kayit.zip_olustur()
+    satirlar = (tmp_path / "vaka_deneme" / "manifest.sha256").read_text(encoding="utf-8").splitlines()
+    ozetler = dict(reversed(s.split("  ")) for s in satirlar)
+    assert set(ozetler) == {"001_asama1_v1.png", "rapor.json"}
+    with open(yol, "rb") as f:
+        assert ozetler["001_asama1_v1.png"] == hashlib.sha256(f.read()).hexdigest()
+    import zipfile
+    assert "vaka_deneme/manifest.sha256" in zipfile.ZipFile(zip_yolu).namelist()

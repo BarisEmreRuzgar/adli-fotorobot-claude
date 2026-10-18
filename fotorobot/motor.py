@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from .config import Ayarlar
-from .ozellikler import agirliklari_ayir
+from .ozellikler import BLOK_AYIRICI, agirliklari_ayir
 
 FACEID_ADAPTOR = "faceid_0"
 # Yalnızca tespit, kimlik (ArcFace) ve yaş/cinsiyet modelleri gerekli
@@ -85,16 +85,24 @@ def kirpma_kutusu(bbox, boyut, pay, en_az):
 
 
 def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
-    """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler."""
-    ids, agirliklar = [], []
-    for metin, agirlik in agirliklari_ayir(prompt):
-        parca_ids = tokenle(metin)
-        ids += parca_ids
-        agirliklar += [agirlik] * len(parca_ids)
-    sonuc, bas = [], 0
-    for parca in token_parcala(ids, ayirici_id, uzunluk):
-        sonuc.append((parca, agirliklar[bas:bas + len(parca)]))
-        bas += len(parca)
+    """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler.
+
+    BLOK_AYIRICI ("BREAK") her zaman yeni bir parça başlatır; bloklar birbirine karışmaz.
+    """
+    sonuc = []
+    for blok in prompt.split(BLOK_AYIRICI.strip()):
+        blok = blok.strip(" ,")
+        if not blok and sonuc:
+            continue
+        ids, agirliklar = [], []
+        for metin, agirlik in agirliklari_ayir(blok):
+            parca_ids = tokenle(metin)
+            ids += parca_ids
+            agirliklar += [agirlik] * len(parca_ids)
+        bas = 0
+        for parca in token_parcala(ids, ayirici_id, uzunluk):
+            sonuc.append((parca, agirliklar[bas:bas + len(parca)]))
+            bas += len(parca)
     return sonuc
 
 

@@ -53,6 +53,9 @@ AKSESUAR_AGIRLIGI = 1.2
 # sarıya boyanınca) yüzler kadınsılaşıyordu, bu yüzden erkeklik ayrıca vurgulanır
 ERKEKLIK_AGIRLIGI = 1.2
 
+# Prompt'ta yeni bir 77 token'lık parça başlatan işaret (A1111'deki BREAK)
+BLOK_AYIRICI = " BREAK "
+
 _AGIRLIK_KALIBI = re.compile(r"\(([^():]+):\s*([0-9]*\.?[0-9]+)\)")
 
 
@@ -255,29 +258,41 @@ def prompt_olustur(oz, onceki=None, referans=None):
     if not kadin and not _sakal_var_mi(oz["sakal"]):
         parcalar.append(agirlikli("masculine male face, masculine facial features", ERKEKLIK_AGIRLIGI))
     parcalar += vurgular
-    # Yara izi, küpe, gözlük gibi ayırt edici izler ilk parçada kalsın diye öne alınır
+    # Prompt anlamsal bloklara ayrılır; her blok ayrı 77 token'lık parçada kodlanır
+    # (BLOK_AYIRICI). Aynı parçadaki sıfatlar birbirine sızıyordu: "koyu saç" ile
+    # "beyaz bıyık" yan yana olunca bıyık da koyu, kısa saç ön kabulü de uzun saçı
+    # bastırıyordu. 1: kişi + kafa yapısı + saç, 2: yüz içi + sakal + izler/aksesuar,
+    # 3: çekim koşulları.
+    blok1 = parcalar + [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+    blok2 = []
+    # Yara izi, küpe, gözlük gibi ayırt edici izler bloğun başına alınır
     if oz["ozel"]:
-        parcalar.append(agirlikli(oz["ozel"], IZ_AGIRLIGI))
+        blok2.append(agirlikli(oz["ozel"], IZ_AGIRLIGI))
     if oz["aksesuar"]:
-        parcalar.append(_aksesuar_vurgusu(oz["aksesuar"]))
-    parcalar += [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+        blok2.append(_aksesuar_vurgusu(oz["aksesuar"]))
     if not kadin:
-        parcalar.append(oz["sakal"] or "clean shaven")
-    parcalar += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
+        blok2.append(oz["sakal"] or "clean shaven")
+    blok2 += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
+    blok3 = []
     if not _iceriyor(oz["aksesuar"], "hoodie", "jacket", "suit", "shirt", "coat", "sweater"):
-        parcalar.append("wearing a plain dark crew-neck t-shirt")
-    parcalar += [
+        blok3.append("wearing a plain dark crew-neck t-shirt")
+    blok3 += [
         "head and shoulders portrait, entire head in frame with space above the hair, centered",
         "facing camera, looking at viewer, neutral expression",
         "plain light grey background, even studio lighting",
         "sharp focus, photorealistic, highly detailed natural skin texture, 8k uhd, dslr",
     ]
-    tekil = []
-    for p in parcalar:
-        p = (p or "").strip()
-        if p and p not in tekil:
-            tekil.append(p)
-    pozitif = ", ".join(tekil)
+    gorulen, bloklar = set(), []
+    for blok in (blok1, blok2, blok3):
+        tekil = []
+        for p in blok:
+            p = (p or "").strip()
+            if p and p not in gorulen:
+                tekil.append(p)
+                gorulen.add(p)
+        if tekil:
+            bloklar.append(", ".join(tekil))
+    pozitif = BLOK_AYIRICI.join(bloklar)
 
     negatif = eski_negatifler + [
         "worst quality, low quality, lowres, blurry, jpeg artifacts",
@@ -286,6 +301,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
         "watermark, text, logo, signature, frame, multiple people",
         "cropped head, head out of frame, close-up, shirtless, bare chest, nude",
         "smiling, open mouth, tilted head, profile view, dramatic lighting, heavy makeup",
+        # Model "güzelleştirmeye" yatkın; fotorobot sıradan, kusurlu bir yüz olmalı
+        "fashion model, airbrushed skin, studio glamour, beauty retouching",
         "nsfw",
     ]
     if _yas_negatifi(oz["yas"]):
