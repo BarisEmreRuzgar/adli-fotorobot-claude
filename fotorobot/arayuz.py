@@ -8,9 +8,10 @@ from . import __version__
 from .config import Ayarlar, api_anahtari_bul
 from .gemini import Gemini
 from .kayit import VakaKaydi, gorsel_ac, yeni_vaka_id
+from .motor import ben_noktasi
 from .ozellikler import (
-    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, bolge_promptu, normalize, ozet_metni, prompt_olustur,
-    varsayilan_ozellikler,
+    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, ben_konumlari, bolge_promptu, degisiklik_bolgeleri,
+    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler,
 )
 
 ORNEK_IFADELER = [
@@ -41,11 +42,18 @@ CSS = """
 
 ETIKET_ALAN = {v: k for k, v in ALAN_ETIKETLERI.items()}
 
+BOLGE_ADLARI = {"goz": "göz çevresi", "burun": "burun", "agiz": "ağız", "alt_yuz": "alt yüz (sakal/bıyık)",
+                "kulak": "kulaklar", "sac": "saç"}
+
 # Aksesuar kaldırılırken kullanılacak en düşük değişim miktarı (txt2img'ye geçer)
 KALDIRMA_DEGISIMI = 1.0
 # Aşama 3'te en düşük CFG: testte varsayılan 6'da işaretli bölge düz cilt olarak
 # yeniden çizildi, 8'de ayrıntı (yara izi) çizildi
 BOLGE_EN_AZ_CFG = 8.0
+# Ben fırçası: Aşama 3 testinde yarıçap 9 + ağırlık 1.35 → 5/5 doğal ben
+BEN_YARICAPI = 9
+BEN_YER_ADLARI = {"yanak": "yanak", "kas_ustu": "kaş üstü", "alin": "alın", "cene": "çene",
+                  "dudak_ustu": "dudak üstü", "burun": "burun"}
 
 
 def oz_tablo(oz):
@@ -77,6 +85,15 @@ def tablodan_oz(tablo, temel=None):
             deger = ""
         ham[alan] = deger
     return normalize(ham, temel=temel)
+
+
+def tahmin_uyarisi(alanlar):
+    """Tanığın belirtmediği, YZ'nin tamamladığı özellikler için görselin üstünde gösterilecek uyarı."""
+    adlar = [ALAN_ETIKETLERI[a] for a in ALANLAR if a in (alanlar or []) and a != "cinsiyet"]
+    if not adlar:
+        return ""
+    return ("⚠️ **Tanık tarafından belirtilmedi (YZ tahmini):** " + ", ".join(adlar)
+            + ". Bu özellikler tanığa ayrıca sorulmadan kesin kabul edilmemelidir.")
 
 
 def maske_ciz(boyut, noktalar, yaricap, birlestir=True):
@@ -120,7 +137,11 @@ class Uygulama:
     def __init__(self, motor, ayarlar=None, gemini=None):
         self.motor = motor
         self.ayarlar = ayarlar or motor.ayarlar
-        self.gemini = gemini or Gemini(api_anahtari_bul(), self.ayarlar.gemini_modelleri)
+        self.gemini = gemini or Gemini(
+            api_anahtari_bul(), self.ayarlar.gemini_modelleri,
+            onbellek_yolu=(self.ayarlar.cikti_klasoru / "_gemini_onbellek.json")
+            if self.ayarlar.gemini_onbellek else None,
+        )
 
     # ── Ortak ─────────────────────────────────────────────────────────
 
@@ -156,18 +177,22 @@ class Uygulama:
     # ── Aşama 1 ───────────────────────────────────────────────────────
 
     def analiz_et(self, ifade):
+        """Dönüş: (tablo, rapor, özellikler, YZ tahmini uyarısı, tahmin edilen alanlar)."""
         if not (ifade or "").strip():
-            return gr.update(), "❌ Tanık ifadesi boş!", None
-        oz, rapor = self.gemini.ifade_analiz(ifade)
+            return gr.update(), "❌ Tanık ifadesi boş!", None, "", []
+        oz, rapor, tahmin = self.gemini.ifade_analiz(ifade)
         rapor.append("")
         rapor.append(ozet_metni(oz))
-        return oz_tablo(oz), "\n".join(rapor), oz
+        return oz_tablo(oz), "\n".join(rapor), oz, tahmin_uyarisi(tahmin), tahmin
 
     def uret(self, tablo, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
         if not self.motor.hazir:
             return gr.update(), [], "❌ Modeller yüklenemedi; konsoldaki hatayı kontrol edin.", vaka_id
         oz = tablodan_oz(tablo)
-        pozitif, negatif = prompt_olustur(oz)
+        benler = []
+        if self.ayarlar.otomatik_ben:
+            kalan, benler = ben_konumlari(oz["ozel"])
+        pozitif, negatif = prompt_olustur(dict(oz, ozel=kalan) if benler else oz)
         vaka_id = vaka_id or yeni_vaka_id()
         kayit = self._kayit(vaka_id)
         try:
@@ -175,6 +200,7 @@ class Uygulama:
                 pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim), cfg=float(cfg),
                 ilerleme=lambda o, m: progress(o, desc=m),
             )
+            cizilen = self._benleri_ciz(sonuclar, benler, int(adim), progress) if benler else 0
         except Exception as e:  # noqa: BLE001
             return gr.update(), [], _hata_metni(e), vaka_id
         galeri, liste = [], []
@@ -186,16 +212,45 @@ class Uygulama:
             "tanik_ifadesi": ifade, "ozellikler": oz, "prompt": pozitif, "negatif_prompt": negatif,
             "tohumlar": [t for _, t in sonuclar], "adim": int(adim), "cfg": float(cfg),
             "gorseller": [x["yol"] for x in liste],
+            "otomatik_benler": [{"yer": y, "taraf": tr} for y, tr in benler],
         })
-        rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}", "", "Prompt:", pozitif]
+        rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}"]
+        if benler:
+            yerler = ", ".join(BEN_YER_ADLARI[y] + (f" ({'sağ' if tr == 'sag' else 'sol'})" if tr else "")
+                               for y, tr in benler)
+            rapor.append(f"🖌️ Ben yüz noktalarına göre çizildi: {yerler} · {cizilen}/{len(sonuclar)} yüzde")
+        rapor += ["", "Prompt:", pozitif]
         return galeri, liste, "\n".join(rapor), vaka_id
 
+    def _benleri_ciz(self, sonuclar, benler, adim, progress):
+        """Yeri belli benleri her varyasyona Aşama 3 yöntemiyle çizer (sonuclar yerinde
+        güncellenir). Yüzü bulunamayan varyasyon olduğu gibi kalır. Dönüş: çizilen yüz sayısı."""
+        pozitif, negatif = bolge_promptu(BOLGE_ORNEKLERI["Ben"])
+        cizilen = 0
+        for i, (gorsel, t) in enumerate(sonuclar):
+            progress(i / len(sonuclar), desc=f"Ben çiziliyor ({i + 1}/{len(sonuclar)})")
+            yuz = self.motor.yuz_bul(gorsel)
+            if yuz is None:
+                continue
+            noktalar = [ben_noktasi(yuz.kps, yer, taraf) for yer, taraf in benler]
+            maske = maske_ciz(gorsel.size, noktalar, BEN_YARICAPI, birlestir=False)
+            yeni = self.motor.bolge_duzenle(gorsel, maske, pozitif, negatif, adet=1, tohum=t, adim=adim,
+                                            cfg=BOLGE_EN_AZ_CFG)
+            sonuclar[i] = (yeni[0][0], t)
+            cizilen += 1
+        return cizilen
+
     def analiz_ve_uret(self, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
-        tablo, analiz_raporu, oz = self.analiz_et(ifade)
+        tablo, analiz_raporu, oz, uyari, tahmin = self.analiz_et(ifade)
         if oz is None:
-            return gr.update(), gr.update(), [], analiz_raporu, vaka_id
+            return gr.update(), gr.update(), [], analiz_raporu, vaka_id, uyari
         galeri, liste, uretim_raporu, vaka_id = self.uret(tablo, ifade, vaka_id, adet, adim, cfg, tohum, progress)
-        return tablo, galeri, liste, analiz_raporu + "\n\n" + uretim_raporu, vaka_id
+        if liste:
+            # Hangi özelliklerin tanıktan değil YZ'den geldiği vaka kaydında da dursun
+            self._kayit(vaka_id).olay_ekle("tanik_ifadesi_analizi", {
+                "tanik_ifadesi": ifade, "tahmin_edilen_alanlar": tahmin,
+            })
+        return tablo, galeri, liste, analiz_raporu + "\n\n" + uretim_raporu, vaka_id, uyari
 
     @staticmethod
     def secim(liste, evt: gr.SelectData):
@@ -268,6 +323,7 @@ class Uygulama:
         # saçı o yüzden farklıysa kırpıntıdaki saç maskelenir
         kimlik_oz = (gecmis[0].get("oz") if gecmis else None) or kaynak_oz
         pozitif, negatif = prompt_olustur(yeni_oz, onceki=kaynak_oz, referans=kimlik_oz)
+        bolgeler = degisiklik_bolgeleri(kaynak_oz, yeni_oz) if self.ayarlar.bolgesel_duzenleme else None
         sac_maskele = yeni_oz["sac"] != kimlik_oz.get("sac")
         if sac_maskele:
             rapor.append("ℹ️ Saç değiştiği için kimlik kırpıntısında saç bölgesi maskelendi.")
@@ -284,7 +340,7 @@ class Uygulama:
             sonuclar, _ = self.motor.kimlik_koruyarak_uret(
                 kaynak_pil, pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim),
                 cfg=float(cfg), kimlik_gucu=float(kimlik_gucu), degisim=float(degisim),
-                kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele,
+                kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele, bolgeler=bolgeler,
                 ilerleme=lambda o, m: progress(o, desc=m),
             )
         except Exception as e:  # noqa: BLE001
@@ -306,6 +362,9 @@ class Uygulama:
         })
         rapor.append("")
         rapor.append(f"✅ {len(sonuclar)} varyasyon üretildi.")
+        if bolgeler and getattr(self.motor, "son_maske", None) is not None:
+            rapor.append("ℹ️ Yalnızca değişen bölge yeniden çizildi: "
+                         + ", ".join(BOLGE_ADLARI.get(b, b) for b in sorted(bolgeler)))
         rapor.append("ℹ️ Kimlik benzerliği (ArcFace): %50 üzeri genelde aynı kişi kabul edilir.")
         rapor.append("")
         rapor.append(ozet_metni(yeni_oz))
@@ -462,6 +521,7 @@ class Uygulama:
                             rapor1 = gr.Textbox(label="📋 Rapor", lines=10, interactive=False,
                                                 elem_classes="rapor")
                         with gr.Column(scale=2):
+                            tahmin_bandi = gr.Markdown()
                             galeri1 = gr.Gallery(label="🖼️ Üretilen yüzler — birini seçin", columns=4,
                                                  height=430, object_fit="contain", preview=False)
                             with gr.Row():
@@ -527,7 +587,8 @@ class Uygulama:
                             bolge_onizleme = gr.Image(label="🖌️ Ayrıntının yerine tıklayın", type="pil",
                                                       height=480, interactive=False)
                             with gr.Row():
-                                yaricap = gr.Slider(3, 40, value=12, step=1, label="Fırça yarıçapı (piksel)")
+                                yaricap = gr.Slider(3, 40, value=9, step=1, label="Fırça yarıçapı (piksel)",
+                                                    info="Ayrıntı fırça kadar büyük çizilir")
                                 birlestir = gr.Checkbox(value=True, label="Noktaları çizgiyle birleştir")
                             with gr.Row():
                                 btn_nokta_sil = gr.Button("↩️ Son noktayı sil", size="sm")
@@ -592,9 +653,10 @@ class Uygulama:
             # ── Olaylar ──────────────────────────────────────────────
             btn_anahtar.click(self.anahtar_kaydet, [anahtar], [anahtar_durum, durum])
 
-            btn_analiz.click(lambda m: self.analiz_et(m)[:2], [ifade], [tablo1, rapor1])
+            btn_analiz.click(lambda m: [self.analiz_et(m)[i] for i in (0, 1, 3)], [ifade],
+                             [tablo1, rapor1, tahmin_bandi])
             btn_hepsi.click(self.analiz_ve_uret, [ifade, vaka_id, adet1, adim, cfg, tohum],
-                            [tablo1, galeri1, s1_liste, rapor1, vaka_id])
+                            [tablo1, galeri1, s1_liste, rapor1, vaka_id, tahmin_bandi])
             btn_uret.click(self.uret, [tablo1, ifade, vaka_id, adet1, adim, cfg, tohum],
                            [galeri1, s1_liste, rapor1, vaka_id])
             galeri1.select(self.secim, [s1_liste], [secilen1, s1_secili])

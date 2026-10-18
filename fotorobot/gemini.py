@@ -4,10 +4,12 @@ Her fonksiyon başarısız olursa (anahtar yok, kota doldu, ağ hatası) kural
 tabanlı analizciye düşer; böylece uygulama Gemini olmadan da çalışır.
 """
 
+import hashlib
 import io
 import json
 import re
 import time
+from pathlib import Path
 
 from .kural_analiz import degisiklik_uygula, ifade_analiz as kural_ifade_analiz
 from .ozellikler import ALANLAR, normalize
@@ -94,12 +96,34 @@ def _hata_ozeti(mesaj):
 
 
 class Gemini:
-    def __init__(self, api_anahtari="", modeller=("gemini-2.5-flash",)):
+    def __init__(self, api_anahtari="", modeller=("gemini-2.5-flash",), onbellek_yolu=None):
+        """`onbellek_yolu` verilirse metin istekleri yanıtlarıyla diske yazılır: aynı ifade
+        tekrar gönderilmez (kota korunur) ve her seferinde birebir aynı analiz çıkar
+        (yeniden üretilebilirlik; Gemini aynı metne her çağrıda biraz farklı yanıt veriyor).
+        """
         self.modeller = list(modeller)
         self._istemci = None
         self.son_hata = ""
         self.atlanan_modeller = []
+        self.onbellek_yolu = Path(onbellek_yolu) if onbellek_yolu else None
         self.anahtar_ayarla(api_anahtari)
+
+    def _onbellek_anahtari(self, icerik, sistem):
+        if self.onbellek_yolu is None or not all(isinstance(p, str) for p in icerik):
+            return None  # görsel içeren istekler önbelleğe alınmaz
+        return hashlib.sha256(json.dumps([sistem, icerik], ensure_ascii=False).encode()).hexdigest()
+
+    def _onbellek_oku(self):
+        try:
+            return json.loads(self.onbellek_yolu.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _onbellek_yaz(self, anahtar, ham, model):
+        veri = self._onbellek_oku()
+        veri[anahtar] = {"ham": ham, "model": model}
+        self.onbellek_yolu.parent.mkdir(parents=True, exist_ok=True)
+        self.onbellek_yolu.write_text(json.dumps(veri, ensure_ascii=False), encoding="utf-8")
 
     def anahtar_ayarla(self, api_anahtari):
         self.api_anahtari = (api_anahtari or "").strip()
@@ -125,13 +149,21 @@ class Gemini:
         )
         hatalar = []
         self.atlanan_modeller = []
+        anahtar = self._onbellek_anahtari(icerik, sistem)
+        if anahtar:
+            kayit = self._onbellek_oku().get(anahtar)
+            if kayit:
+                return kayit["ham"], f"{kayit['model']}, önbellekten"
         for model in self.modeller:
             for deneme in range(GECICI_HATA_DENEME):
                 try:
                     yanit = self._client().models.generate_content(
                         model=model, contents=icerik, config=config,
                     )
-                    return _json_ayikla(yanit.text), model
+                    ham = _json_ayikla(yanit.text)
+                    if anahtar:
+                        self._onbellek_yaz(anahtar, ham, model)
+                    return ham, model
                 except Exception as e:  # noqa: BLE001 - yeniden dene veya sonraki modele geç
                     mesaj = str(e)
                     # Anahtar geçersizse diğer modelleri denemenin anlamı yok
@@ -163,7 +195,7 @@ class Gemini:
     # ── Yüksek seviye işlemler ────────────────────────────────────────
 
     def ifade_analiz(self, metin):
-        """Dönüş: (özellikler, rapor satırları)."""
+        """Dönüş: (özellikler, rapor satırları, tanığın belirtmediği / tahmin edilen alanlar)."""
         if self.hazir:
             try:
                 ham, model = self._uret([f"Tanık ifadesi:\n{metin}"], IFADE_TALIMATI)
@@ -173,7 +205,7 @@ class Gemini:
                     if isinstance(ham.get("belirtilmeyen"), list) else []
                 if belirtilmeyen:
                     rapor.append("ℹ️ İfadede geçmeyen (tahmin edilen): " + ", ".join(belirtilmeyen))
-                return oz, rapor
+                return oz, rapor, belirtilmeyen
             except Exception as e:  # noqa: BLE001
                 self.son_hata = str(e)
                 rapor = [f"⚠️ Gemini kullanılamadı, kural tabanlı analiz yapıldı.\n   ({str(e)[:300]})"]
@@ -183,7 +215,7 @@ class Gemini:
         eksik = [a for a in ALANLAR if a not in bulunan]
         if eksik:
             rapor.append("ℹ️ İfadede bulunamayan (varsayılan kullanılan): " + ", ".join(eksik))
-        return oz, rapor
+        return oz, rapor, eksik
 
     def degisiklik(self, oz, metin):
         """Dönüş: (yeni özellikler, rapor satırları)."""

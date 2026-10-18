@@ -1,5 +1,6 @@
 """Vaka kayıtları: üretilen her görsel ve işlem, izlenebilirlik için diske yazılır."""
 
+import hashlib
 import json
 import re
 import zipfile
@@ -42,7 +43,22 @@ class VakaKaydi:
         olaylar.append({"zaman": datetime.now().isoformat(timespec="seconds"), "islem": tur, **veri})
         self.rapor_yolu.write_text(json.dumps(olaylar, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def manifest_yaz(self):
+        """Klasördeki her dosyanın SHA-256 özetini `sha256sum` biçiminde yazar.
+
+        Arşiv sonradan değiştirilirse `sha256sum -c manifest.sha256` farkı gösterir.
+        """
+        manifest = self.klasor / "manifest.sha256"
+        satirlar = []
+        for dosya in sorted(self.klasor.iterdir()):
+            if dosya == manifest or not dosya.is_file():
+                continue
+            satirlar.append(f"{hashlib.sha256(dosya.read_bytes()).hexdigest()}  {dosya.name}")
+        manifest.write_text("\n".join(satirlar) + "\n", encoding="utf-8")
+        return manifest
+
     def zip_olustur(self):
+        self.manifest_yaz()
         hedef = self.klasor.parent / f"{self.vaka_id}.zip"
         with zipfile.ZipFile(hedef, "w", zipfile.ZIP_DEFLATED) as z:
             for dosya in sorted(self.klasor.iterdir()):

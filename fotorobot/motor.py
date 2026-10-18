@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from .config import Ayarlar
-from .ozellikler import agirliklari_ayir
+from .ozellikler import BLOK_AYIRICI, agirliklari_ayir
 
 FACEID_ADAPTOR = "faceid_0"
 # Yalnızca tespit, kimlik (ArcFace) ve yaş/cinsiyet modelleri gerekli
@@ -27,8 +27,9 @@ SAC_MASKE_ORANI = 0.3
 # Aşama 3: maskenin çevresinde bağlam için bırakılan pay ve maske kenar yumuşatması (piksel)
 BOLGE_KENARI = 48
 BOLGE_BULANIKLIGI = 4
-# Aşama 3'te kırpma kutusunun en küçük kenarı (piksel)
-BOLGE_EN_AZ_KUTU = 256
+# Aşama 2 bölgesel düzenleme: maske kenar yumuşatması ve bölge içindeki en düşük değişim
+BOLGE2_BULANIKLIGI = 12
+BOLGE2_EN_AZ_DEGISIM = 0.9
 
 
 def _log(cb, mesaj):
@@ -67,34 +68,92 @@ def token_parcala(ids, ayirici_id, uzunluk):
     return parcalar
 
 
-def kirpma_kutusu(bbox, boyut, pay, en_az):
-    """Maske kutusunun çevresinde, en az `en_az` kenarlı ve görüntü içinde kalan kare kırpma kutusu.
+def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
+    """InsightFace'in 5 yüz noktası (sol göz, sağ göz, burun, ağız sol/sağ köşe) ve yüz
+    kutusundan istenen bölgelerin birleşik maskesini çizer (ek model gerektirmez).
 
-    Küçük maskelerde (ör. tek tıklamalık ben) kırpıntı çok büyütülünce model yüzün
-    neresinde olduğunu anlayamıyor; en az boyut, burun/göz gibi bağlamın kadraja
-    girmesini sağlar.
+    Bölgeler: goz (kaşlar + gözler + gözlük), burun, agiz, alt_yuz (bıyık + sakal +
+    çene), kulak, sac (yüz ovalinin dışı).
     """
-    x0, y0, x1, y1 = bbox
-    g, y = boyut
-    kenar = max(x1 - x0, y1 - y0) + 2 * pay
-    kenar = min(max(kenar, en_az), g, y)
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    sol = int(round(min(max(cx - kenar / 2, 0), g - kenar)))
-    ust = int(round(min(max(cy - kenar / 2, 0), y - kenar)))
-    return sol, ust, sol + int(kenar), ust + int(kenar)
+    from PIL import ImageDraw
+
+    (lx, ly), (rx, ry), (nx, ny), (mlx, mly), (mrx, mry) = [tuple(map(float, p)) for p in kps]
+    x0, y0, x1, y1 = map(float, bbox)
+    w, h = x1 - x0, y1 - y0
+    d = max(abs(rx - lx), 1.0)  # göz arası mesafe
+    gy, my = (ly + ry) / 2, (mly + mry) / 2
+    maske = Image.new("L", boyut, 0)
+    ciz = ImageDraw.Draw(maske)
+    for b in bolgeler:
+        if b == "goz":
+            ciz.rectangle((min(lx, rx) - 0.75 * d, gy - 0.6 * d, max(lx, rx) + 0.75 * d, gy + 0.45 * d), fill=255)
+        elif b == "burun":
+            ciz.ellipse((nx - 0.45 * d, gy + 0.05 * d, nx + 0.45 * d, ny + 0.35 * d), fill=255)
+        elif b == "agiz":
+            ciz.ellipse((mlx - 0.3 * d, my - 0.4 * d, mrx + 0.3 * d, my + 0.4 * d), fill=255)
+        elif b == "alt_yuz":
+            ciz.ellipse((x0 - 0.05 * w, ny - 0.15 * d, x1 + 0.05 * w, y1 + 0.15 * h), fill=255)
+        elif b == "kulak":
+            ciz.rectangle((x0 - 0.35 * w, gy - 0.1 * h, x0 + 0.08 * w, my + 0.15 * h), fill=255)
+            ciz.rectangle((x1 - 0.08 * w, gy - 0.1 * h, x1 + 0.35 * w, my + 0.15 * h), fill=255)
+        elif b == "sac":
+            sac = Image.new("L", boyut, 255)
+            ciz_sac = ImageDraw.Draw(sac)
+            ciz_sac.ellipse((x0 + 0.04 * w, y0 + 0.1 * h, x1 - 0.04 * w, y1 + 0.05 * h), fill=0)
+            # Omuz ve kıyafet saç değildir: çenenin biraz altından aşağısı korunur.
+            kesim = y1 + 0.3 * h
+            if kesim < boyut[1]:
+                ciz_sac.rectangle((0, kesim, boyut[0], boyut[1]), fill=0)
+            maske.paste(255, (0, 0), sac)
+    return maske
+
+
+def ben_noktasi(kps, yer, taraf=None):
+    """Benin görüntüdeki yeri (x, y): InsightFace'in 5 noktasından. taraf kişinin kendi
+    sağı/solu; kişinin solu görüntünün sağındadır (kps[1] göz, kps[4] ağız köşesi)."""
+    (lx, ly), (rx, ry), (nx, ny), (mlx, mly), (mrx, mry) = [tuple(map(float, p)) for p in kps]
+    d = max(abs(rx - lx), 1.0)
+    if taraf == "sol":
+        gx, gy, ax, ay, yon = rx, ry, mrx, mry, 1.0
+    else:
+        gx, gy, ax, ay, yon = lx, ly, mlx, mly, -1.0
+    if taraf is None:
+        yon = 0.0
+    if yer == "yanak":
+        return (gx + ax) / 2 + yon * 0.25 * d, (gy + ay) / 2
+    if yer == "kas_ustu":
+        return gx, gy - 0.45 * d
+    if yer == "alin":
+        return (lx + rx) / 2 + yon * 0.3 * d, (ly + ry) / 2 - 0.9 * d
+    if yer == "cene":
+        return (mlx + mrx) / 2 + yon * 0.2 * d, (mly + mry) / 2 + 0.55 * d
+    if yer == "dudak_ustu":
+        x = ax - yon * 0.1 * d if taraf else (mlx + mrx) / 2 + 0.2 * d
+        return x, min(mly, mry) - 0.3 * d
+    if yer == "burun":
+        return nx + yon * 0.15 * d, ny - 0.1 * d
+    raise ValueError(f"bilinmeyen ben yeri: {yer}")
 
 
 def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
-    """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler."""
-    ids, agirliklar = [], []
-    for metin, agirlik in agirliklari_ayir(prompt):
-        parca_ids = tokenle(metin)
-        ids += parca_ids
-        agirliklar += [agirlik] * len(parca_ids)
-    sonuc, bas = [], 0
-    for parca in token_parcala(ids, ayirici_id, uzunluk):
-        sonuc.append((parca, agirliklar[bas:bas + len(parca)]))
-        bas += len(parca)
+    """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler.
+
+    BLOK_AYIRICI ("BREAK") her zaman yeni bir parça başlatır; bloklar birbirine karışmaz.
+    """
+    sonuc = []
+    for blok in prompt.split(BLOK_AYIRICI.strip()):
+        blok = blok.strip(" ,")
+        if not blok and sonuc:
+            continue
+        ids, agirliklar = [], []
+        for metin, agirlik in agirliklari_ayir(blok):
+            parca_ids = tokenle(metin)
+            ids += parca_ids
+            agirliklar += [agirlik] * len(parca_ids)
+        bas = 0
+        for parca in token_parcala(ids, ayirici_id, uzunluk):
+            sonuc.append((parca, agirliklar[bas:bas + len(parca)]))
+            bas += len(parca)
     return sonuc
 
 
@@ -107,8 +166,7 @@ class Motor:
         self.pipe = None
         self.pipe_i2i = None
         self.pipe_inp = None
-        self.pipe_cn_inp = None
-        self._cn_denendi = False
+        self.son_maske = None
         self.yuz_app = None
         self._ip_islemcileri = None
         self._ip_proj = None
@@ -405,13 +463,15 @@ class Motor:
 
     def kimlik_koruyarak_uret(self, kaynak, pozitif, negatif, adet=3, tohum=-1, adim=30,
                               cfg=6.0, kimlik_gucu=0.6, degisim=0.8, kimlik_gorseli=None,
-                              sac_maskele=False, ilerleme=None):
+                              sac_maskele=False, bolgeler=None, ilerleme=None):
         """Kaynak yüzün kimliğini koruyarak yeni prompt ile üretir.
 
         `degisim` 1.0'a yakınsa sıfırdan (txt2img) üretilir; daha düşük değerlerde
         kaynak görselin pozu/ışığı korunur (img2img). `kimlik_gorseli` verilirse
         kimlik bu görselden alınır (art arda düzenlemelerde kimlik kaymasını önler).
         `sac_maskele`: saçı kimlik görselindekinden farklı olacaksa True verin.
+        `bolgeler` (ör. {"goz"}) verilirse ve kaynakta yüz bulunursa yalnızca o yüz
+        bölgeleri FaceID'li inpainting ile yeniden çizilir; geri kalan pikseller korunur.
         Dönüş: ([(PIL görsel, tohum, benzerlik), ...], kimlik yüz kırpıntısı).
         Benzerlik, kimlik görseline göre hesaplanır.
         """
@@ -436,6 +496,13 @@ class Motor:
             oran = 640 / max(g, y)
             g, y = int(g * oran) // 8 * 8, int(y * oran) // 8 * 8
         baslangic = kaynak.resize((g, y), Image.LANCZOS)
+        maske = None
+        if bolgeler:
+            kaynak_yuz = self.yuz_bul(baslangic)
+            if kaynak_yuz is not None:
+                maske = yuz_bolge_maskesi(kaynak_yuz.kps, kaynak_yuz.bbox, baslangic.size, bolgeler)
+                maske = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE2_BULANIKLIGI)
+        self.son_maske = maske
 
         sonuclar = []
         for i, t in enumerate(self._tohumlar(tohum, adet)):
@@ -450,7 +517,14 @@ class Motor:
                 generator=gen,
             )
             with torch.inference_mode():
-                if degisim >= 0.95:
+                if maske is not None:
+                    # Bölge içinde (neredeyse) sıfırdan çizim; dışı kaynakla aynı kalır
+                    guc = max(float(degisim), BOLGE2_EN_AZ_DEGISIM)
+                    cikti = self.pipe_inp(image=baslangic, mask_image=maske, strength=guc,
+                                          width=g, height=y,
+                                          num_inference_steps=max(adim, int(round(adim / guc))),
+                                          **ortak).images[0]
+                elif degisim >= 0.95:
                     cikti = self.pipe(width=g, height=y, num_inference_steps=adim, **ortak).images[0]
                 else:
                     # img2img'de gerçek adım sayısı adim*degisim olur; kaliteyi korumak için telafi et
@@ -464,39 +538,13 @@ class Motor:
 
     # ── Aşama 3 ────────────────────────────────────────────────────────
 
-    def _cn_inpaint_hazirla(self):
-        """Inpaint ControlNet'li pipeline'ı ilk Aşama 3 kullanımında kurar; olmazsa None."""
-        if self._cn_denendi:
-            return self.pipe_cn_inp
-        self._cn_denendi = True
-        if not self.ayarlar.inpaint_controlnet:
-            return None
-        try:
-            from diffusers import ControlNetModel, StableDiffusionControlNetInpaintPipeline
-
-            print("⏳ Inpaint ControlNet yükleniyor (ilk seferde ~700 MB indirilir)...", flush=True)
-            cn = ControlNetModel.from_pretrained(self.ayarlar.inpaint_controlnet, torch_dtype=self.dtype)
-            pipe = StableDiffusionControlNetInpaintPipeline(**self.pipe.components, controlnet=cn)
-            pipe.set_progress_bar_config(disable=True)
-            if self.cihaz == "cuda" and self.ayarlar.dusuk_vram:
-                pipe.enable_model_cpu_offload()
-            else:
-                cn.to(self.cihaz)
-            self.pipe_cn_inp = pipe
-        except Exception as e:  # noqa: BLE001 - ControlNet'siz yönteme düşülür
-            print(f"⚠️ Inpaint ControlNet yüklenemedi, eski yöntem kullanılacak: {e}", flush=True)
-            self.durum_notlari.append("Inpaint ControlNet yüklenemedi; Aşama 3 küçük ayrıntılarda zayıf olabilir.")
-        return self.pipe_cn_inp
-
     def bolge_duzenle(self, kaynak, maske, pozitif, negatif, adet=3, tohum=-1, adim=30, cfg=8.0,
                       guc=1.0, kenar=BOLGE_KENARI, ilerleme=None):
         """Yalnızca maskelenen bölgeyi yeniden çizer (yara izi, ben, küpe gibi küçük ayrıntılar).
 
-        Maskenin çevresi (en az BOLGE_EN_AZ_KUTU kenarlı kare) kırpılıp 512 piksele
-        büyütülür, inpaint ControlNet'iyle çizilir ve yumuşak maskeyle kaynağa geri
-        yapıştırılır; maskenin dışı piksel piksel korunur. ControlNet, maskeli bölgenin
-        "burada boşluk var" bilgisini UNet'e verdiği için standart UNet'in çevredeki
-        düz cildi geri getirme eğilimini kırar (testte küçük ben bu yüzden çizilmiyordu).
+        Maskenin çevresi `kenar` piksel payla kırpılıp 512 piksele büyütülür,
+        orada çizilir ve kaynağa geri yapıştırılır; böylece küçük ayrıntılar tam
+        çözünürlükte üretilir, maskenin dışı piksel piksel korunur.
         Dönüş: [(PIL görsel, tohum, benzerlik), ...]; benzerlik kaynağa göredir.
         """
         import torch
@@ -507,21 +555,10 @@ class Motor:
             maske = maske.resize(kaynak.size, Image.NEAREST)
         if maske.getbbox() is None:
             raise ValueError("Maske boş: değişecek bölgeyi fırçayla boyayın.")
-        yumusak = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE_BULANIKLIGI)
+        maske = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE_BULANIKLIGI)
         yuz = self.yuz_bul(kaynak)
-        cn_pipe = self._cn_inpaint_hazirla()
 
         poz_emb, neg_emb = self._prompt_kodla(pozitif, negatif)
-        # strength adım sayısını kısaltır; kaliteyi korumak için telafi et
-        adim_i = max(adim, int(round(adim / max(float(guc), 0.2))))
-        if cn_pipe is not None:
-            kutu = kirpma_kutusu(maske.getbbox(), kaynak.size, kenar, BOLGE_EN_AZ_KUTU)
-            kirpik = kaynak.crop(kutu).resize((512, 512), Image.LANCZOS)
-            kirpik_maske = maske.crop(kutu).resize((512, 512), Image.NEAREST)
-            dizi = np.asarray(kirpik, dtype=np.float32) / 255.0
-            dizi[np.asarray(kirpik_maske) > 127] = -1.0  # inpaint ControlNet'in beklediği boşluk işareti
-            kosul = torch.from_numpy(dizi.transpose(2, 0, 1))[None]
-
         sonuclar = []
         with self._ip_adapter_kapali():
             for i, t in enumerate(self._tohumlar(tohum, adet)):
@@ -529,24 +566,17 @@ class Motor:
                     ilerleme(i / adet, f"Varyasyon {i + 1}/{adet} üretiliyor...")
                 gen = torch.Generator("cpu").manual_seed(t)
                 with torch.inference_mode():
-                    if cn_pipe is not None:
-                        cizim = cn_pipe(
-                            prompt_embeds=poz_emb, negative_prompt_embeds=neg_emb,
-                            image=kirpik, mask_image=kirpik_maske, control_image=kosul,
-                            strength=float(guc), width=512, height=512,
-                            num_inference_steps=adim_i, guidance_scale=cfg, generator=gen,
-                        ).images[0]
-                        cikti = kaynak.copy()
-                        geri = cizim.resize((kutu[2] - kutu[0], kutu[3] - kutu[1]), Image.LANCZOS)
-                        cikti.paste(geri, kutu[:2], yumusak.crop(kutu))
-                    else:
-                        cikti = self.pipe_inp(
-                            prompt_embeds=poz_emb, negative_prompt_embeds=neg_emb,
-                            image=kaynak, mask_image=yumusak,
-                            strength=float(guc), padding_mask_crop=int(kenar),
-                            width=512, height=512,
-                            num_inference_steps=adim_i, guidance_scale=cfg, generator=gen,
-                        ).images[0]
+                    cikti = self.pipe_inp(
+                        prompt_embeds=poz_emb,
+                        negative_prompt_embeds=neg_emb,
+                        image=kaynak, mask_image=maske,
+                        strength=float(guc), padding_mask_crop=int(kenar),
+                        width=512, height=512,
+                        # strength adım sayısını kısaltır; kaliteyi korumak için telafi et
+                        num_inference_steps=max(adim, int(round(adim / max(float(guc), 0.2)))),
+                        guidance_scale=cfg,
+                        generator=gen,
+                    ).images[0]
                 benzerlik = self.kimlik_benzerligi(None, cikti, yuz_a=yuz) if yuz is not None else None
                 sonuclar.append((cikti, t, benzerlik))
         self._bellek_temizle()

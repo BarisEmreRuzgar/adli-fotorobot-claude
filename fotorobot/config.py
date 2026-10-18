@@ -61,11 +61,14 @@ class Ayarlar:
     image_encoder_klasor: str = _env("FOTOROBOT_IMAGE_ENCODER_SUBFOLDER", "models/image_encoder")
     ip_repo: str = _env("FOTOROBOT_IP_REPO", "h94/IP-Adapter-FaceID")
     ip_agirlik: str = _env("FOTOROBOT_IP_WEIGHT", "ip-adapter-faceid-plusv2_sd15.bin")
-    # Aşama 3 (bölgesel ayrıntı) için inpaint ControlNet'i; ilk kullanımda yüklenir (~700 MB).
-    # Boş bırakılırsa ControlNet'siz maske karıştırma kullanılır.
-    inpaint_controlnet: str = _env("FOTOROBOT_INPAINT_CONTROLNET", "lllyasviel/control_v11p_sd15_inpaint")
     ip_lora: str = _env("FOTOROBOT_IP_LORA", "ip-adapter-faceid-plusv2_sd15_lora.safetensors")
     cikti_klasoru: Path = Path(_env("FOTOROBOT_OUTPUT_DIR", "ciktilar"))
+    # Aynı ifade/komut için Gemini yanıtını diskten kullan (kota + yeniden üretilebilirlik)
+    gemini_onbellek: bool = _env_bool("FOTOROBOT_GEMINI_CACHE", True)
+    # Aşama 2'de yalnızca değişen yüz bölgesini (göz, sakal, saç...) yeniden çiz
+    bolgesel_duzenleme: bool = _env_bool("FOTOROBOT_REGIONAL_EDIT", True)
+    # Aşama 1'de yeri belli benleri prompt yerine yüz noktalarına göre Aşama 3 ile çiz
+    otomatik_ben: bool = _env_bool("FOTOROBOT_AUTO_MOLE", True)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

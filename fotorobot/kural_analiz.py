@@ -371,7 +371,8 @@ def _aksesuar(m):
 
 KONUMLAR = [
     (r"sağ\s*yana[kğ]", "on right cheek"), (r"sol\s*yana[kğ]", "on left cheek"),
-    (r"yana[kğ]", "on cheek"), (r"kaş", "across eyebrow"), (r"aln", "on forehead"),
+    (r"yana[kğ]", "on cheek"),
+    (r"sağ\s*kaş", "above right eyebrow"), (r"sol\s*kaş", "above left eyebrow"), (r"kaş", "across eyebrow"), (r"aln", "on forehead"),
     (r"çene", "on chin"), (r"duda", "on lip"), (r"göz", "near eye"),
     (r"boyn|boyun", "on neck"), (r"burn|burun", "on nose"), (r"kula", "on ear"),
 ]

@@ -196,8 +196,25 @@ def test_ayirt_edici_izler_promptun_basinda():
     oz["ozel"] = "thin white scar above left eyebrow"
     oz["aksesuar"] = "small silver hoop earring on right ear"
     poz, _ = prompt_olustur(oz)
-    assert poz.index("scar") < poz.index(oz["ten"])
-    assert poz.index("hoop earring") < poz.index(oz["sac"])
+    from fotorobot.ozellikler import BLOK_AYIRICI
+
+    kafa, yuz_ici, cekim = poz.split(BLOK_AYIRICI)
+    # Saç kafa bloğunda; izler ve aksesuar yüz içi bloğunun başında, sakal/gözlerden önce
+    assert oz["sac"] in kafa and "scar" not in kafa
+    assert yuz_ici.startswith("(thin white scar")
+    assert yuz_ici.index("hoop earring") < yuz_ici.index(oz["goz"])
+    assert "portrait" in cekim
+
+
+def test_break_bloklari_ayri_parcada_kodlanir():
+    from fotorobot.motor import agirlikli_parcala
+
+    def tokenle(metin):
+        return [len(k) for k in metin.replace(",", " , ").split()]
+
+    parcalar = agirlikli_parcala("aa bb BREAK cc, (dd:1.5) BREAK ee", tokenle, 1, 75)
+    assert [p for p, _ in parcalar] == [[2, 2], [2, 1, 2], [2]]
+    assert parcalar[1][1] == [1.0, 1.0, 1.5]
 
 
 @pytest.mark.parametrize("gozluk, kalin_vurgu", [
@@ -280,15 +297,17 @@ def test_agirlikli_parcala_agirliklari_tokenlara_tasir():
                         ([4, 2, VIRGUL, 1], [1.5, 1.5, 1.0, 1.0])]
 
 
-def test_bolge_promptu_kisa_ve_tek_parca():
-    from fotorobot.ozellikler import BOLGE_ORNEKLERI, bolge_promptu
+def test_bolge_promptu_kisa_agirlikli_ve_cilt_tarifsiz():
+    from fotorobot.ozellikler import BOLGE_AGIRLIGI, BOLGE_ORNEKLERI, bolge_promptu
 
     for detay in BOLGE_ORNEKLERI.values():
         poz, neg = bolge_promptu(detay)
-        assert poz.startswith(detay)
+        assert poz.startswith(f"({detay}:{BOLGE_AGIRLIGI:g})")
+        # Cilt tarifi modeli düz cilde itiyordu
+        assert "skin" not in poz.replace(detay, "")
         # CLIP tokenizer yok; kelime sayısı 75 token'ın çok altında kalmalı
         assert len(poz.replace(",", " ").split()) < 40
-    assert bolge_promptu("  scar ,  ")[0].startswith("scar, RAW photo")
+    assert bolge_promptu("  scar ,  ")[0] == f"(scar:{BOLGE_AGIRLIGI:g}), photo, realistic"
 
 
 def test_maske_ciz_nokta_ve_cizgi():
@@ -330,18 +349,19 @@ def test_arayuz_modelsiz_kurulur():
     assert demo is not None
 
 
-def test_sakalsiz_erkekte_erkeklik_vurgulanir(ornek_erkek):
+def test_erkek_yuzde_erkeklik_vurgulanir(ornek_erkek):
     from fotorobot.ozellikler import ERKEKLIK_AGIRLIGI
 
+    vurgu = f"(masculine male face, masculine facial features:{ERKEKLIK_AGIRLIGI:g})"
+    # Sakallı yüzde de (sakal tarif edildiği halde kadın yüzler çıkabiliyordu)
     sakalli = dict(ornek_erkek, sakal="short full beard")
     poz, neg = prompt_olustur(sakalli)
-    assert "masculine" not in poz and "androgynous" not in neg
+    assert vurgu in poz and "androgynous" in neg
 
     # Sakal silinip saç sarıya boyandığında (kadınsılaşan durum) erkeklik vurgulanır
     yeni, _ = degisiklik_uygula(sakalli, "sakalı temizle\nsaçları sarı yap")
     poz, neg = prompt_olustur(yeni, onceki=sakalli, referans=sakalli)
-    assert f"(masculine male face, masculine facial features:{ERKEKLIK_AGIRLIGI:g})" in poz
-    assert "androgynous" in neg
+    assert vurgu in poz and "androgynous" in neg
 
     kadin_poz, _ = prompt_olustur(varsayilan_ozellikler("female"))
     assert "masculine" not in kadin_poz
@@ -368,24 +388,138 @@ def test_gemini_atlanan_model_rapora_yazilir():
 
     g = Gemini("deneme-anahtari", ["ana", "ikinci", "yedek"])
     g._istemci = SimpleNamespace(models=SimpleNamespace(generate_content=uret))
-    _, rapor = g.ifade_analiz("30 yaşında bir erkek")
+    _, rapor, _ = g.ifade_analiz("30 yaşında bir erkek")
     metin = "\n".join(rapor)
     assert "(yedek)" in metin
     assert "ana → kota / istek sınırı doldu (429)" in metin
     assert "ikinci → model bulunamadı (404)" in metin
 
 
-def test_kirpma_kutusu_en_az_boyut_ve_sinirlar():
-    from fotorobot.motor import kirpma_kutusu
+def test_tahmin_uyarisi():
+    from fotorobot.arayuz import tahmin_uyarisi
 
-    # Küçük maske (ben): en az 256 px kare, maske ortada
-    k = kirpma_kutusu((300, 340, 324, 364), (512, 640), 48, 256)
-    assert k[2] - k[0] == 256 and k[3] - k[1] == 256
-    assert k[0] <= 300 and k[2] >= 324 and k[1] <= 340 and k[3] >= 364
-    # Kenara yakın maske görüntü dışına taşmaz
-    k = kirpma_kutusu((500, 5, 510, 15), (512, 640), 48, 256)
-    assert k[0] >= 0 and k[1] >= 0 and k[2] <= 512 and k[3] <= 640
-    assert k[2] - k[0] == 256
-    # Büyük maske: maske + pay, görüntüden büyük olamaz
-    k = kirpma_kutusu((0, 0, 500, 600), (512, 640), 48, 256)
-    assert k[2] - k[0] == 512 and k[3] - k[1] == 512
+    assert tahmin_uyarisi([]) == ""
+    assert tahmin_uyarisi(["cinsiyet"]) == ""
+    u = tahmin_uyarisi(["dudak", "burun", "bilinmeyen"])
+    assert "Burun, Dudak" in u and "YZ tahmini" in u
+
+
+def test_vaka_manifesti(tmp_path):
+    import hashlib
+
+    from PIL import Image
+
+    from fotorobot.kayit import VakaKaydi
+
+    kayit = VakaKaydi(tmp_path, "vaka_deneme")
+    yol = kayit.gorsel_kaydet(Image.new("RGB", (8, 8)), "asama1_v1", {"tohum": 1})
+    kayit.olay_ekle("deneme", {"a": 1})
+    zip_yolu = kayit.zip_olustur()
+    satirlar = (tmp_path / "vaka_deneme" / "manifest.sha256").read_text(encoding="utf-8").splitlines()
+    ozetler = dict(reversed(s.split("  ")) for s in satirlar)
+    assert set(ozetler) == {"001_asama1_v1.png", "rapor.json"}
+    with open(yol, "rb") as f:
+        assert ozetler["001_asama1_v1.png"] == hashlib.sha256(f.read()).hexdigest()
+    import zipfile
+    assert "vaka_deneme/manifest.sha256" in zipfile.ZipFile(zip_yolu).namelist()
+
+
+def test_gemini_onbellek_ayni_istegi_tekrar_gondermez(tmp_path):
+    from types import SimpleNamespace
+
+    from fotorobot.gemini import Gemini
+
+    cagri = []
+
+    def uret(model, contents, config):
+        cagri.append(model)
+        return SimpleNamespace(text='{"cinsiyet": "male", "yas": %d}' % (30 + len(cagri)))
+
+    g = Gemini("anahtar", ["m"], onbellek_yolu=tmp_path / "onbellek.json")
+    g._istemci = SimpleNamespace(models=SimpleNamespace(generate_content=uret))
+    oz1, rapor1, _ = g.ifade_analiz("bir erkek")
+    oz2, rapor2, _ = g.ifade_analiz("bir erkek")
+    assert len(cagri) == 1 and oz1 == oz2
+    assert "önbellekten" in rapor2[0]
+    g.ifade_analiz("başka bir erkek")
+    assert len(cagri) == 2
+
+
+def test_degisiklik_bolgeleri(ornek_erkek):
+    from fotorobot.ozellikler import degisiklik_bolgeleri
+
+    yeni, _ = degisiklik_uygula(ornek_erkek, "sakalı temizle")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) == {"alt_yuz"}
+    yeni, _ = degisiklik_uygula(ornek_erkek, "sakalı temizle\nsaçları sarı yap")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) == {"alt_yuz", "sac"}
+    # Gözlük çıkarmak / küpe eklemek bölgesel
+    assert degisiklik_bolgeleri(dict(ornek_erkek, aksesuar="glasses"),
+                                dict(ornek_erkek, aksesuar="")) == {"goz"}
+    assert degisiklik_bolgeleri(dict(ornek_erkek, aksesuar=""),
+                                dict(ornek_erkek, aksesuar="silver hoop earring")) == {"kulak"}
+    # Yaş veya ten gibi bütünsel değişiklikte bölgesel düzenleme yok
+    yeni, _ = degisiklik_uygula(ornek_erkek, "10 yaş yaşlandır")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) is None
+    assert degisiklik_bolgeleri(ornek_erkek, dict(ornek_erkek)) is None
+
+
+def test_yuz_bolge_maskesi():
+    import numpy as np
+
+    from fotorobot.motor import yuz_bolge_maskesi
+
+    kps = np.array([[200, 260], [312, 260], [256, 320], [215, 380], [297, 380]])
+    bbox = np.array([150, 160, 362, 460])
+    goz = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz"})) > 0
+    assert goz[260, 256] and goz[260, 200] and not goz[380, 256] and not goz[600, 256]
+    alt = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"alt_yuz"})) > 0
+    assert alt[400, 256] and alt[350, 256] and not alt[200, 256]
+    sac = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"sac"})) > 0
+    assert sac[20, 256] and sac[300, 20] and not sac[300, 256]
+    assert sac[500, 20] and not sac[620, 20] and not sac[620, 256]  # omuz/kıyafet korunur
+    alttaki = np.array(yuz_bolge_maskesi(kps + [0, 150], bbox + [0, 150, 0, 150], (512, 640), {"sac"})) > 0
+    assert alttaki[630, 20]  # çene resmin altına yakınsa kesim taşmaz
+    birlesik = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz", "alt_yuz"})) > 0
+    assert birlesik.sum() >= max(goz.sum(), alt.sum())
+
+
+def test_degisiklik_bolgeleri_yalnizca_degisen_aksesuar(ornek_erkek):
+    from fotorobot.ozellikler import degisiklik_bolgeleri
+
+    once = dict(ornek_erkek, aksesuar="thin metal glasses, small silver hoop earring")
+    sonra = dict(ornek_erkek, aksesuar="small silver hoop earring")
+    assert degisiklik_bolgeleri(once, sonra) == {"goz"}
+
+
+def test_ben_konumlari_yeri_belli_benleri_ayiklar():
+    from fotorobot.ozellikler import ben_konumlari
+
+    kalan, benler = ben_konumlari("visible scar on right cheek, small dark mole on the left cheek")
+    assert kalan == "visible scar on right cheek" and benler == [("yanak", "sol")]
+    kalan, benler = ben_konumlari("mole above right eyebrow and a mole on chin")
+    assert kalan == "" and benler == [("kas_ustu", "sag"), ("cene", None)]
+    # Tarafı belli olmayan yanak beni ve yeri olmayan ben prompt'ta kalır
+    assert ben_konumlari("mole on cheek, mole") == ("mole on cheek, mole", [])
+    # "and" sözcük içinde bölünmez
+    assert ben_konumlari("sandy freckles") == ("sandy freckles", [])
+
+
+def test_ben_noktasi_kisinin_soluna_goruntunun_sagina_cizer():
+    import numpy as np
+
+    from fotorobot.motor import ben_noktasi
+
+    kps = np.array([[200, 260], [312, 260], [256, 320], [215, 380], [297, 380]])
+    x, y = ben_noktasi(kps, "yanak", "sol")
+    assert x > 312 and 260 < y < 380
+    x, y = ben_noktasi(kps, "yanak", "sag")
+    assert x < 200
+    x, y = ben_noktasi(kps, "kas_ustu", "sag")
+    assert x == 200 and y < 260
+    x, y = ben_noktasi(kps, "cene", None)
+    assert x == 256 and y > 380
+
+
+def test_kural_analiz_kas_ustu_beni_tarafli():
+    oz = ifade_analiz("Sağ kaşının üstünde belirgin ben var.")[0]
+    assert "mole above right eyebrow" in oz["ozel"]

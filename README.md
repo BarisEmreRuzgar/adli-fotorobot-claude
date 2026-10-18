@@ -39,7 +39,9 @@ Sistem tanık ifadesini analiz ederek yüz özelliklerini (yaş, cinsiyet, saç,
 | 🔁 **Art arda düzenleme** | Sonucu yeni kaynak yapma, geçmiş ve geri alma; kimlik her zaman ilk yüzden alınır (kayma olmaz) |
 | 📤 **Fotoğraf yükleme** | Aşama 2'ye kendi fotoğrafınızı yükleyip düzenleyebilirsiniz |
 | 🖌️ **Bölgesel ayrıntı** | Yara izi, ben, küpe gibi küçük ayrıntılar tıklanarak işaretlenen bölgeye çizilir (Aşama 3, inpainting); yüzün geri kalanı korunur |
-| 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum ve benzerlikler `ciktilar/` altına yazılır; ZIP olarak indirilebilir |
+| 📍 **Otomatik ben** | Tanık benin yerini söylediyse ("sol yanağında ben") ben prompt'a yazılmaz; üretilen her yüzde yüz noktalarından yeri hesaplanıp oraya çizilir (prompt'ta 0/4, böyle 4/4) |
+| 📁 **Vaka kaydı** | Tüm görseller, ifade, prompt, tohum, maskeler ve benzerlikler `ciktilar/` altına yazılır; ZIP'te her dosyanın SHA-256 özeti (`manifest.sha256`) bulunur |
+| ⚠️ **YZ tahmini uyarısı** | Tanığın belirtmediği, modelin tamamladığı özellikler görselin üstünde ve vaka kaydında belirtilir |
 | 💾 **Düşük VRAM desteği** | 6 GB GPU'larda çalışır; daha düşük bellekte otomatik CPU offload |
 
 ---
@@ -82,23 +84,26 @@ python app.py               # --share: herkese açık bağlantı, --low-vram: d�
 
 **Aşama 1: Tanık ifadesi → Fotorobot**
 1. Tanık ifadesini yazın ve **⚡ Analiz et ve üret** düğmesine basın.
-2. Özellik tablosundaki değerleri isterseniz düzeltin, sonra **🎨 Tablodan üret** ile yeniden üretin.
-3. Galeriden şüpheliye en çok benzeyen yüzü seçip **➡️ Aşama 2'ye gönder** düğmesine basın.
+2. Galerinin üstündeki sarı bant, tanığın **belirtmediği** ve yapay zekânın tamamladığı özellikleri listeler (ör. burun, dudak). Bunlar tanığa ayrıca sorulmalıdır.
+3. Özellik tablosundaki değerleri isterseniz düzeltin, sonra **🎨 Tablodan üret** ile yeniden üretin.
+4. Galeriden şüpheliye en çok benzeyen yüzü seçip **➡️ Aşama 2'ye gönder** düğmesine basın.
+
+Aynı tanık ifadesi her seferinde aynı analizi verir: Gemini yanıtları `ciktilar/_gemini_onbellek.json` içinde saklanır (kota da harcanmaz). Prompt üç bloğa ayrılarak kodlanır (kafa + saç | yüz içi + sakal + izler | çekim koşulları); aynı bloktaki özelliklerin birbirine karışması azalır.
 
 **Aşama 2: Kimlik korumalı düzenleme**
 1. Her değişikliği ayrı satıra yazın, örneğin `sakalı temizle`, `kısa kare sakal ekle`, `gözler mavi olsun`, `gözlük ekle`, `saçları sarı yap`, `kel yap`, `10 yaş yaşlandır`.
-2. **Kimlik koruma gücü** (varsayılan 0.6): yüksek değerde yüz yapısı daha sıkı korunur ama değişiklikler zayıflar. Testlerde 0.8'de gözlük eklenemedi; 0.4'te ise yaşlandırma güçlü ama kimlik %50'ye düştü.
-3. **Değişim miktarı** (varsayılan 0.8): düşük değerde poz ve ışık korunur, `1.0` değerinde poz da yeniden üretilir.
+2. Değişiklik bir yüz bölgesine aitse (sakal → alt yüz, gözlük/göz/kaş → göz çevresi, küpe → kulaklar, saç/şapka → yüz ovalinin dışı, dudak, burun) **yalnızca o bölge** yeniden çizilir; yüzün geri kalanı, ışık ve arka plan aynen kalır. Yaş, ten, yüz şekli gibi bütünsel değişikliklerde tüm görüntü düzenlenir. Rapor hangi bölgenin çizildiğini yazar. Colab testinde bölgesel düzenleme kimlik benzerliğini gözlük çıkarmada %67'den %75'e, sakal silmede %61'den %66'ya çıkardı.
+3. **Yüz ne kadar aynı kalsın?** (varsayılan 0.6): yüksek değerde yüz yapısı daha sıkı korunur ama değişiklikler zayıflar. Değişiklik tutmazsa düşürün.
 4. Beğendiğiniz sonucu **↪️ yeni kaynak yap** ile seçip bir sonraki değişikliğe geçin.
 5. Yara izi, ben, küpe gibi küçük ayrıntılar için sonucu **➡️ Aşama 3'e gönder**.
 
 **Aşama 3: Bölgesel ayrıntı**
 1. Ayrıntının olacağı yere görsel üzerinde tıklayın (örneğin sol kaşın üstü). Uzun bir iz için başından sonuna birkaç noktaya tıklayın; noktalar fırça kalınlığında çizgiyle birleşir. İşaretli bölge kırmızı görünür.
-2. **Hazır ayrıntı** listesinden seçin veya İngilizce yazın (`thin pale healed scar on the skin`).
+2. **Hazır ayrıntı** listesinden seçin veya İngilizce, kısa bir nesne adıyla yazın (`dark brown mole`). Uygulama tarifi ağırlıklandırır (`(... :1.35)`); "close-up of human skin" gibi cilt tarifleri modeli düz cilde iter.
 3. **🖌️ Bölgeyi yeniden çiz**: yalnızca işaretli bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
 4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi işaretleyin.
 
-Colab testinde (T4) yara izi ancak geniş fırça (yarıçap 12-14), belirgin tarif (`prominent visible ...`), CFG 8 ve değişim gücü 1.0 ile çizildi; sade tarif ve CFG 6 ile bölge düz cilt olarak yeniden çiziliyordu. Varsayılanlar buna göre ayarlıdır. Maskenin dışındaki piksel farkı 0.01'in altında, kimlik benzerliği %99+ ölçüldü. Maskeler de vaka kaydına yazılır.
+Colab testinde (T4, 5 tohum) ben, varsayılan fırça (yarıçap 9) ve ağırlık 1.35 ile 5/5 doğal çizildi; ağırlık 1.6'da iri ve yara gibi oluyor. **Yara izi henüz güvenilir değil**: ağırlıklı tariflerde dövme ya da şerit gibi yapay çizgiler çıkıyor, bunları engelleyen negatifler izi de siliyor (en iyi sonuç 1/5). ControlNet inpaint ve 9 kanallı inpainting modeli denendi, ikisi de yeni ayrıntıyı bastırdığı için eklenmedi. Birkaç varyasyon üretip en doğal olanı seçin. Maskenin dışındaki piksel farkı 0.01'in altında, kimlik benzerliği %99+ ölçüldü. Maskeler de vaka kaydına yazılır.
 
 ---
 
@@ -149,6 +154,9 @@ Testlerde kimlik benzerliği (ArcFace) IP-Adapter ile **%70-80**, IP-Adapter olm
 | `FOTOROBOT_LOW_VRAM` | otomatik | `1`: CPU offload'u zorla |
 | `FOTOROBOT_OUTPUT_DIR` | `ciktilar` | Vaka kayıtları klasörü |
 | `FOTOROBOT_SHARE` | Colab'da `1` | Herkese açık Gradio bağlantısı |
+| `FOTOROBOT_GEMINI_CACHE` | `1` | Aynı ifade için Gemini yanıtını diskten kullan |
+| `FOTOROBOT_REGIONAL_EDIT` | `1` | Aşama 2'de yalnızca değişen yüz bölgesini yeniden çiz |
+| `FOTOROBOT_AUTO_MOLE` | `1` | Yeri belli benleri yüz noktalarına göre otomatik çiz |
 
 ---
 

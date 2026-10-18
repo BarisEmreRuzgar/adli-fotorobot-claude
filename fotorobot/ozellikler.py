@@ -53,6 +53,9 @@ AKSESUAR_AGIRLIGI = 1.2
 # sarıya boyanınca) yüzler kadınsılaşıyordu, bu yüzden erkeklik ayrıca vurgulanır
 ERKEKLIK_AGIRLIGI = 1.2
 
+# Prompt'ta yeni bir 77 token'lık parça başlatan işaret (A1111'deki BREAK)
+BLOK_AYIRICI = " BREAK "
+
 _AGIRLIK_KALIBI = re.compile(r"\(([^():]+):\s*([0-9]*\.?[0-9]+)\)")
 
 
@@ -230,6 +233,50 @@ def _fark_vurgulari(oz, onceki, kadin):
     return vurgular, negatifler
 
 
+# Aşama 2'de değişen alan → yeniden çizilecek yüz bölgesi. Listede olmayan bir alan
+# (yaş, ten, yüz şekli, çene, belirgin iz...) tüm yüzü etkilediği için bölgesel
+# düzenleme yapılmaz.
+ALAN_BOLGELERI = {"sakal": "alt_yuz", "dudak": "agiz", "goz": "goz", "kas": "goz",
+                  "burun": "burun", "sac": "sac"}
+
+
+def _aksesuar_bolgeleri(aksesuar):
+    bolgeler = set()
+    for a in [p.strip().lower() for p in (aksesuar or "").split(",") if p.strip()]:
+        if _iceriyor(a, "glasses", "spectacles", "eyewear", "eye patch"):
+            bolgeler.add("goz")
+        elif _iceriyor(a, "earring", "ear "):
+            bolgeler.add("kulak")
+        elif _iceriyor(a, "hat", "cap", "beanie", "hood", "helmet", "headscarf", "bandana"):
+            bolgeler.add("sac")
+        else:
+            return None
+    return bolgeler
+
+
+def degisiklik_bolgeleri(onceki, yeni):
+    """Aşama 2'de yalnızca hangi yüz bölgelerinin yeniden çizileceği; bütünsel bir
+    değişiklik varsa (veya hiç değişiklik yoksa) None (tüm görüntü düzenlenir)."""
+    bolgeler = set()
+    for alan in ALANLAR:
+        if alan == "cinsiyet" or (yeni.get(alan) or "") == (onceki.get(alan) or ""):
+            continue
+        if alan == "aksesuar":
+            # Yalnızca eklenen veya kaldırılan aksesuarların bölgesi değişir; dokunulmayan
+            # (ör. gözlük çıkarılırken kalan küpe) bölgeye girmez
+            eski = {a.strip() for a in (onceki.get("aksesuar") or "").split(",") if a.strip()}
+            yeni_a = {a.strip() for a in (yeni.get("aksesuar") or "").split(",") if a.strip()}
+            degisen = _aksesuar_bolgeleri(", ".join(sorted(eski ^ yeni_a)))
+            if degisen is None:
+                return None
+            bolgeler |= degisen
+        elif alan in ALAN_BOLGELERI:
+            bolgeler.add(ALAN_BOLGELERI[alan])
+        else:
+            return None
+    return bolgeler or None
+
+
 def prompt_olustur(oz, onceki=None, referans=None):
     """Özelliklerden (pozitif, negatif) prompt çifti üretir.
 
@@ -252,32 +299,46 @@ def prompt_olustur(oz, onceki=None, referans=None):
             eski_negatifler += n
 
     parcalar = [f"RAW photo, frontal passport style portrait of a {_kisi_ifadesi(oz)}"]
-    if not kadin and not _sakal_var_mi(oz["sakal"]):
+    if not kadin:
+        # Yalnızca sakalsız yüzlerde değil: "siyah saç + beyaz sakal" testinde sakal
+        # tarif edildiği halde 4 yüzün 3'ü kadın çıktı (sakal çizilmeyince erkeklik kayboluyor)
         parcalar.append(agirlikli("masculine male face, masculine facial features", ERKEKLIK_AGIRLIGI))
     parcalar += vurgular
-    # Yara izi, küpe, gözlük gibi ayırt edici izler ilk parçada kalsın diye öne alınır
+    # Prompt anlamsal bloklara ayrılır; her blok ayrı 77 token'lık parçada kodlanır
+    # (BLOK_AYIRICI). Aynı parçadaki sıfatlar birbirine sızıyordu: "koyu saç" ile
+    # "beyaz bıyık" yan yana olunca bıyık da koyu, kısa saç ön kabulü de uzun saçı
+    # bastırıyordu. 1: kişi + kafa yapısı + saç, 2: yüz içi + sakal + izler/aksesuar,
+    # 3: çekim koşulları.
+    blok1 = parcalar + [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+    blok2 = []
+    # Yara izi, küpe, gözlük gibi ayırt edici izler bloğun başına alınır
     if oz["ozel"]:
-        parcalar.append(agirlikli(oz["ozel"], IZ_AGIRLIGI))
+        blok2.append(agirlikli(oz["ozel"], IZ_AGIRLIGI))
     if oz["aksesuar"]:
-        parcalar.append(_aksesuar_vurgusu(oz["aksesuar"]))
-    parcalar += [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+        blok2.append(_aksesuar_vurgusu(oz["aksesuar"]))
     if not kadin:
-        parcalar.append(oz["sakal"] or "clean shaven")
-    parcalar += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
+        blok2.append(oz["sakal"] or "clean shaven")
+    blok2 += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
+    blok3 = []
     if not _iceriyor(oz["aksesuar"], "hoodie", "jacket", "suit", "shirt", "coat", "sweater"):
-        parcalar.append("wearing a plain dark crew-neck t-shirt")
-    parcalar += [
+        blok3.append("wearing a plain dark crew-neck t-shirt")
+    blok3 += [
         "head and shoulders portrait, entire head in frame with space above the hair, centered",
         "facing camera, looking at viewer, neutral expression",
         "plain light grey background, even studio lighting",
         "sharp focus, photorealistic, highly detailed natural skin texture, 8k uhd, dslr",
     ]
-    tekil = []
-    for p in parcalar:
-        p = (p or "").strip()
-        if p and p not in tekil:
-            tekil.append(p)
-    pozitif = ", ".join(tekil)
+    gorulen, bloklar = set(), []
+    for blok in (blok1, blok2, blok3):
+        tekil = []
+        for p in blok:
+            p = (p or "").strip()
+            if p and p not in gorulen:
+                tekil.append(p)
+                gorulen.add(p)
+        if tekil:
+            bloklar.append(", ".join(tekil))
+    pozitif = BLOK_AYIRICI.join(bloklar)
 
     negatif = eski_negatifler + [
         "worst quality, low quality, lowres, blurry, jpeg artifacts",
@@ -286,6 +347,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
         "watermark, text, logo, signature, frame, multiple people",
         "cropped head, head out of frame, close-up, shirtless, bare chest, nude",
         "smiling, open mouth, tilted head, profile view, dramatic lighting, heavy makeup",
+        # Model "güzelleştirmeye" yatkın; fotorobot sıradan, kusurlu bir yüz olmalı
+        "fashion model, airbrushed skin, studio glamour, beauty retouching",
         "nsfw",
     ]
     if _yas_negatifi(oz["yas"]):
@@ -294,9 +357,9 @@ def prompt_olustur(oz, onceki=None, referans=None):
         negatif.append("man, male, beard, mustache, stubble")
     else:
         negatif.append("woman, female, feminine, makeup")
+        negatif.append("androgynous, feminine face, soft feminine features")
         if not _sakal_var_mi(oz["sakal"]):
             negatif.append("beard, mustache, stubble, goatee")
-            negatif.append("androgynous, feminine face, soft feminine features")
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
@@ -308,31 +371,71 @@ def prompt_olustur(oz, onceki=None, referans=None):
 
 
 # Aşama 3 (bölgesel ayrıntı) için hazır ayrıntılar: Türkçe etiket → İngilizce prompt.
-# Colab testinde "thin pale scar" gibi sade tarifler bölgeyi düz cilt olarak yeniden
-# çizdi; "prominent visible ..." gibi belirgin tarifler izi gerçekten çizdirdi.
+# Kısa nesne adları; bolge_promptu bunları ağırlıklandırır.
 BOLGE_ORNEKLERI = {
-    "Yara izi": "prominent visible pale healed scar line, raised scar tissue on the skin",
-    "Ben": "prominent dark brown mole on the skin",
+    "Yara izi": "pale healed scar line, raised scar tissue",
+    "Ben": "dark brown mole, beauty spot",
     "Halka küpe": "small shiny silver hoop earring pierced through the earlobe",
-    "Dövme": "visible black ink tattoo on the skin",
-    "Çil": "many visible brown freckles on the skin",
-    "Derin kırışıklık": "deep prominent wrinkles in the skin",
+    "Dövme": "black ink tattoo",
+    "Çil": "brown freckles",
+    "Derin kırışıklık": "deep wrinkles",
     "Kırık burun kemeri": "crooked nose bridge, previously broken nose",
 }
+# Ayrıntının ağırlığı. Colab testi (aynı kaynak/maske/tohum, ben): cilt tarifli eski prompt
+# 0/3; ağırlık 1.2 → 1-2/5; 1.35 → 5/5 doğal ben (yarıçap 9); 1.6 → 6/6 ama iri, yara gibi.
+# Cilt tarifleri modeli düz cilde itiyor, ağırlıksız nesne kayboluyor.
+BOLGE_AGIRLIGI = 1.35
+
+
+# Aşama 1 prompt'unda yazılan ben neredeyse hiç çizilmiyor (Colab testi, 4 tohum: yanakta
+# 0/4, kaş üstünde 0/4). Yeri belli benler prompt'tan çıkarılıp üretilen yüze, yüz
+# noktalarından hesaplanan yere Aşama 3 ile çizilir (aynı testte 4/4 ve 4/4 doğru yerde).
+BEN_SOZCUKLERI = ("mole", "beauty mark", "beauty spot")
+BEN_YERLERI = (  # (anahtar sözcükler, yer); sıra önemli: özelden genele
+    (("eyebrow", "brow"), "kas_ustu"),
+    (("upper lip", "above the lip", "above lip", "above his lip", "above her lip"), "dudak_ustu"),
+    (("cheek",), "yanak"),
+    (("chin",), "cene"),
+    (("forehead",), "alin"),
+    (("nose",), "burun"),
+)
+# Bu yerlerde taraf (sağ/sol) bilinmeden nokta seçilemez
+TARAF_GEREKEN = {"kas_ustu", "yanak"}
+
+
+def ben_konumlari(ozel):
+    """`ozel` alanındaki yeri belli benleri ayıklar.
+
+    Döndürür: (kalan_ozel, [(yer, taraf), ...]). taraf kişinin kendi sağı/solu
+    ("sag"/"sol") ya da None. Yeri anlaşılamayan ben `kalan_ozel`de kalır.
+    """
+    kalan, benler = [], []
+    for parca in re.split(r",|;|\band\b", ozel or ""):
+        p = parca.strip()
+        k = p.lower()
+        if not p:
+            continue
+        if not any(b in k for b in BEN_SOZCUKLERI):
+            kalan.append(p)
+            continue
+        yer = next((y for sozcukler, y in BEN_YERLERI if any(x in k for x in sozcukler)), None)
+        taraf = "sag" if re.search(r"\bright\b", k) else "sol" if re.search(r"\bleft\b", k) else None
+        if yer is None or (yer in TARAF_GEREKEN and taraf is None):
+            kalan.append(p)
+        else:
+            benler.append((yer, taraf))
+    return ", ".join(kalan), benler
 
 
 def bolge_promptu(detay):
     """Aşama 3 için kısa (pozitif, negatif) prompt çifti.
 
-    Yalnızca maskelenen bölge yeniden çizildiği için prompt o bölgeyi
-    tarif eder; yüzün geri kalanını anlatmaya gerek yoktur ve kısa prompt
-    77 token'lık tek parçada kalır.
+    Yalnızca maskelenen bölge yeniden çizildiği için prompt yalnızca eklenecek
+    ayrıntıyı (ağırlıklı) söyler; "cilt" gibi bölgeyi tarif eden sözcükler
+    modeli mevcut düz cildi yeniden çizmeye ittiği için kullanılmaz.
     """
     detay = " ".join((detay or "").split()).strip(" ,.")
-    pozitif = ", ".join(p for p in [
-        detay, "RAW photo, close-up of human skin, photorealistic",
-        "natural skin texture, sharp focus, even studio lighting",
-    ] if p)
+    pozitif = ", ".join(p for p in [agirlikli(detay, BOLGE_AGIRLIGI), "photo, realistic"] if p)
     negatif = ("worst quality, low quality, blurry, jpeg artifacts, cartoon, painting, drawing, "
                "3d render, deformed, text, watermark, makeup")
     return pozitif, negatif
