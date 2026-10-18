@@ -154,6 +154,9 @@ Testlerde kimlik benzerliği (ArcFace) IP-Adapter ile **%70-80**, IP-Adapter olm
 | `FOTOROBOT_LOW_VRAM` | otomatik | `1`: CPU offload'u zorla |
 | `FOTOROBOT_OUTPUT_DIR` | `ciktilar` | Vaka kayıtları klasörü |
 | `FOTOROBOT_SHARE` | Colab'da `1` | Herkese açık Gradio bağlantısı |
+| `FOTOROBOT_GEMINI_CACHE` | `1` | Aynı ifade için Gemini yanıtını diskten kullan |
+| `FOTOROBOT_REGIONAL_EDIT` | `1` | Aşama 2'de yalnızca değişen yüz bölgesini yeniden çiz |
+| `FOTOROBOT_AUTO_MOLE` | `1` | Yeri belli benleri yüz noktalarına göre otomatik çiz |
 
 ---
 
