@@ -476,6 +476,7 @@ def test_yuz_bolge_maskesi():
     assert alt[400, 256] and alt[350, 256] and not alt[200, 256]
     sac = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"sac"})) > 0
     assert sac[20, 256] and sac[300, 20] and not sac[300, 256]
+    assert sac[500, 20] and not sac[620, 20] and not sac[620, 256]  # omuz/kıyafet korunur
     birlesik = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz", "alt_yuz"})) > 0
     assert birlesik.sum() >= max(goz.sum(), alt.sum())
 
