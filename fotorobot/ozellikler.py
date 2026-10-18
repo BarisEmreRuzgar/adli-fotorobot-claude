@@ -233,6 +233,48 @@ def _fark_vurgulari(oz, onceki, kadin):
     return vurgular, negatifler
 
 
+# Aşama 2'de değişen alan → yeniden çizilecek yüz bölgesi. Listede olmayan bir alan
+# (yaş, ten, yüz şekli, çene, belirgin iz...) tüm yüzü etkilediği için bölgesel
+# düzenleme yapılmaz.
+ALAN_BOLGELERI = {"sakal": "alt_yuz", "dudak": "agiz", "goz": "goz", "kas": "goz",
+                  "burun": "burun", "sac": "sac"}
+
+
+def _aksesuar_bolgeleri(aksesuar):
+    bolgeler = set()
+    for a in [p.strip().lower() for p in (aksesuar or "").split(",") if p.strip()]:
+        if _iceriyor(a, "glasses", "spectacles", "eyewear", "eye patch"):
+            bolgeler.add("goz")
+        elif _iceriyor(a, "earring", "ear "):
+            bolgeler.add("kulak")
+        elif _iceriyor(a, "hat", "cap", "beanie", "hood", "helmet", "headscarf", "bandana"):
+            bolgeler.add("sac")
+        else:
+            return None
+    return bolgeler
+
+
+def degisiklik_bolgeleri(onceki, yeni):
+    """Aşama 2'de yalnızca hangi yüz bölgelerinin yeniden çizileceği; bütünsel bir
+    değişiklik varsa (veya hiç değişiklik yoksa) None (tüm görüntü düzenlenir)."""
+    bolgeler = set()
+    for alan in ALANLAR:
+        if alan == "cinsiyet" or (yeni.get(alan) or "") == (onceki.get(alan) or ""):
+            continue
+        if alan == "aksesuar":
+            # Eklenen ve kaldırılan aksesuarların ikisinin de bölgesi değişir
+            eski_b = _aksesuar_bolgeleri(onceki.get("aksesuar"))
+            yeni_b = _aksesuar_bolgeleri(yeni.get("aksesuar"))
+            if eski_b is None or yeni_b is None:
+                return None
+            bolgeler |= eski_b | yeni_b
+        elif alan in ALAN_BOLGELERI:
+            bolgeler.add(ALAN_BOLGELERI[alan])
+        else:
+            return None
+    return bolgeler or None
+
+
 def prompt_olustur(oz, onceki=None, referans=None):
     """Özelliklerden (pozitif, negatif) prompt çifti üretir.
 

@@ -9,8 +9,8 @@ from .config import Ayarlar, api_anahtari_bul
 from .gemini import Gemini
 from .kayit import VakaKaydi, gorsel_ac, yeni_vaka_id
 from .ozellikler import (
-    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, bolge_promptu, normalize, ozet_metni, prompt_olustur,
-    varsayilan_ozellikler,
+    ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, bolge_promptu, degisiklik_bolgeleri, normalize,
+    ozet_metni, prompt_olustur, varsayilan_ozellikler,
 )
 
 ORNEK_IFADELER = [
@@ -40,6 +40,9 @@ CSS = """
 """
 
 ETIKET_ALAN = {v: k for k, v in ALAN_ETIKETLERI.items()}
+
+BOLGE_ADLARI = {"goz": "göz çevresi", "burun": "burun", "agiz": "ağız", "alt_yuz": "alt yüz (sakal/bıyık)",
+                "kulak": "kulaklar", "sac": "saç"}
 
 # Aksesuar kaldırılırken kullanılacak en düşük değişim miktarı (txt2img'ye geçer)
 KALDIRMA_DEGISIMI = 1.0
@@ -287,6 +290,7 @@ class Uygulama:
         # saçı o yüzden farklıysa kırpıntıdaki saç maskelenir
         kimlik_oz = (gecmis[0].get("oz") if gecmis else None) or kaynak_oz
         pozitif, negatif = prompt_olustur(yeni_oz, onceki=kaynak_oz, referans=kimlik_oz)
+        bolgeler = degisiklik_bolgeleri(kaynak_oz, yeni_oz) if self.ayarlar.bolgesel_duzenleme else None
         sac_maskele = yeni_oz["sac"] != kimlik_oz.get("sac")
         if sac_maskele:
             rapor.append("ℹ️ Saç değiştiği için kimlik kırpıntısında saç bölgesi maskelendi.")
@@ -303,7 +307,7 @@ class Uygulama:
             sonuclar, _ = self.motor.kimlik_koruyarak_uret(
                 kaynak_pil, pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim),
                 cfg=float(cfg), kimlik_gucu=float(kimlik_gucu), degisim=float(degisim),
-                kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele,
+                kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele, bolgeler=bolgeler,
                 ilerleme=lambda o, m: progress(o, desc=m),
             )
         except Exception as e:  # noqa: BLE001
@@ -325,6 +329,9 @@ class Uygulama:
         })
         rapor.append("")
         rapor.append(f"✅ {len(sonuclar)} varyasyon üretildi.")
+        if bolgeler and getattr(self.motor, "son_maske", None) is not None:
+            rapor.append("ℹ️ Yalnızca değişen bölge yeniden çizildi: "
+                         + ", ".join(BOLGE_ADLARI.get(b, b) for b in sorted(bolgeler)))
         rapor.append("ℹ️ Kimlik benzerliği (ArcFace): %50 üzeri genelde aynı kişi kabul edilir.")
         rapor.append("")
         rapor.append(ozet_metni(yeni_oz))

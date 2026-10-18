@@ -27,6 +27,9 @@ SAC_MASKE_ORANI = 0.3
 # Aşama 3: maskenin çevresinde bağlam için bırakılan pay ve maske kenar yumuşatması (piksel)
 BOLGE_KENARI = 48
 BOLGE_BULANIKLIGI = 4
+# Aşama 2 bölgesel düzenleme: maske kenar yumuşatması ve bölge içindeki en düşük değişim
+BOLGE2_BULANIKLIGI = 12
+BOLGE2_EN_AZ_DEGISIM = 0.9
 
 
 def _log(cb, mesaj):
@@ -65,6 +68,41 @@ def token_parcala(ids, ayirici_id, uzunluk):
     return parcalar
 
 
+def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
+    """InsightFace'in 5 yüz noktası (sol göz, sağ göz, burun, ağız sol/sağ köşe) ve yüz
+    kutusundan istenen bölgelerin birleşik maskesini çizer (ek model gerektirmez).
+
+    Bölgeler: goz (kaşlar + gözler + gözlük), burun, agiz, alt_yuz (bıyık + sakal +
+    çene), kulak, sac (yüz ovalinin dışı).
+    """
+    from PIL import ImageDraw
+
+    (lx, ly), (rx, ry), (nx, ny), (mlx, mly), (mrx, mry) = [tuple(map(float, p)) for p in kps]
+    x0, y0, x1, y1 = map(float, bbox)
+    w, h = x1 - x0, y1 - y0
+    d = max(abs(rx - lx), 1.0)  # göz arası mesafe
+    gy, my = (ly + ry) / 2, (mly + mry) / 2
+    maske = Image.new("L", boyut, 0)
+    ciz = ImageDraw.Draw(maske)
+    for b in bolgeler:
+        if b == "goz":
+            ciz.rectangle((min(lx, rx) - 0.75 * d, gy - 0.6 * d, max(lx, rx) + 0.75 * d, gy + 0.45 * d), fill=255)
+        elif b == "burun":
+            ciz.ellipse((nx - 0.45 * d, gy + 0.05 * d, nx + 0.45 * d, ny + 0.35 * d), fill=255)
+        elif b == "agiz":
+            ciz.ellipse((mlx - 0.3 * d, my - 0.4 * d, mrx + 0.3 * d, my + 0.4 * d), fill=255)
+        elif b == "alt_yuz":
+            ciz.ellipse((x0 - 0.05 * w, ny - 0.15 * d, x1 + 0.05 * w, y1 + 0.15 * h), fill=255)
+        elif b == "kulak":
+            ciz.rectangle((x0 - 0.35 * w, gy - 0.1 * h, x0 + 0.08 * w, my + 0.15 * h), fill=255)
+            ciz.rectangle((x1 - 0.08 * w, gy - 0.1 * h, x1 + 0.35 * w, my + 0.15 * h), fill=255)
+        elif b == "sac":
+            sac = Image.new("L", boyut, 255)
+            ImageDraw.Draw(sac).ellipse((x0 + 0.04 * w, y0 + 0.1 * h, x1 - 0.04 * w, y1 + 0.05 * h), fill=0)
+            maske.paste(255, (0, 0), sac)
+    return maske
+
+
 def agirlikli_parcala(prompt, tokenle, ayirici_id, uzunluk):
     """`(ifade:1.3)` ağırlıklarını ayıklayıp prompt'u (token'lar, ağırlıklar) parçalarına böler.
 
@@ -96,6 +134,7 @@ class Motor:
         self.pipe = None
         self.pipe_i2i = None
         self.pipe_inp = None
+        self.son_maske = None
         self.yuz_app = None
         self._ip_islemcileri = None
         self._ip_proj = None
@@ -392,13 +431,15 @@ class Motor:
 
     def kimlik_koruyarak_uret(self, kaynak, pozitif, negatif, adet=3, tohum=-1, adim=30,
                               cfg=6.0, kimlik_gucu=0.6, degisim=0.8, kimlik_gorseli=None,
-                              sac_maskele=False, ilerleme=None):
+                              sac_maskele=False, bolgeler=None, ilerleme=None):
         """Kaynak yüzün kimliğini koruyarak yeni prompt ile üretir.
 
         `degisim` 1.0'a yakınsa sıfırdan (txt2img) üretilir; daha düşük değerlerde
         kaynak görselin pozu/ışığı korunur (img2img). `kimlik_gorseli` verilirse
         kimlik bu görselden alınır (art arda düzenlemelerde kimlik kaymasını önler).
         `sac_maskele`: saçı kimlik görselindekinden farklı olacaksa True verin.
+        `bolgeler` (ör. {"goz"}) verilirse ve kaynakta yüz bulunursa yalnızca o yüz
+        bölgeleri FaceID'li inpainting ile yeniden çizilir; geri kalan pikseller korunur.
         Dönüş: ([(PIL görsel, tohum, benzerlik), ...], kimlik yüz kırpıntısı).
         Benzerlik, kimlik görseline göre hesaplanır.
         """
@@ -423,6 +464,13 @@ class Motor:
             oran = 640 / max(g, y)
             g, y = int(g * oran) // 8 * 8, int(y * oran) // 8 * 8
         baslangic = kaynak.resize((g, y), Image.LANCZOS)
+        maske = None
+        if bolgeler:
+            kaynak_yuz = self.yuz_bul(baslangic)
+            if kaynak_yuz is not None:
+                maske = yuz_bolge_maskesi(kaynak_yuz.kps, kaynak_yuz.bbox, baslangic.size, bolgeler)
+                maske = self.pipe_inp.mask_processor.blur(maske, blur_factor=BOLGE2_BULANIKLIGI)
+        self.son_maske = maske
 
         sonuclar = []
         for i, t in enumerate(self._tohumlar(tohum, adet)):
@@ -437,7 +485,14 @@ class Motor:
                 generator=gen,
             )
             with torch.inference_mode():
-                if degisim >= 0.95:
+                if maske is not None:
+                    # Bölge içinde (neredeyse) sıfırdan çizim; dışı kaynakla aynı kalır
+                    guc = max(float(degisim), BOLGE2_EN_AZ_DEGISIM)
+                    cikti = self.pipe_inp(image=baslangic, mask_image=maske, strength=guc,
+                                          width=g, height=y,
+                                          num_inference_steps=max(adim, int(round(adim / guc))),
+                                          **ortak).images[0]
+                elif degisim >= 0.95:
                     cikti = self.pipe(width=g, height=y, num_inference_steps=adim, **ortak).images[0]
                 else:
                     # img2img'de gerçek adım sayısı adim*degisim olur; kaliteyi korumak için telafi et

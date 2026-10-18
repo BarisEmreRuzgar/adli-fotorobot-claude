@@ -442,3 +442,38 @@ def test_gemini_onbellek_ayni_istegi_tekrar_gondermez(tmp_path):
     assert "önbellekten" in rapor2[0]
     g.ifade_analiz("başka bir erkek")
     assert len(cagri) == 2
+
+
+def test_degisiklik_bolgeleri(ornek_erkek):
+    from fotorobot.ozellikler import degisiklik_bolgeleri
+
+    yeni, _ = degisiklik_uygula(ornek_erkek, "sakalı temizle")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) == {"alt_yuz"}
+    yeni, _ = degisiklik_uygula(ornek_erkek, "sakalı temizle\nsaçları sarı yap")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) == {"alt_yuz", "sac"}
+    # Gözlük çıkarmak / küpe eklemek bölgesel
+    assert degisiklik_bolgeleri(dict(ornek_erkek, aksesuar="glasses"),
+                                dict(ornek_erkek, aksesuar="")) == {"goz"}
+    assert degisiklik_bolgeleri(dict(ornek_erkek, aksesuar=""),
+                                dict(ornek_erkek, aksesuar="silver hoop earring")) == {"kulak"}
+    # Yaş veya ten gibi bütünsel değişiklikte bölgesel düzenleme yok
+    yeni, _ = degisiklik_uygula(ornek_erkek, "10 yaş yaşlandır")
+    assert degisiklik_bolgeleri(ornek_erkek, yeni) is None
+    assert degisiklik_bolgeleri(ornek_erkek, dict(ornek_erkek)) is None
+
+
+def test_yuz_bolge_maskesi():
+    import numpy as np
+
+    from fotorobot.motor import yuz_bolge_maskesi
+
+    kps = np.array([[200, 260], [312, 260], [256, 320], [215, 380], [297, 380]])
+    bbox = np.array([150, 160, 362, 460])
+    goz = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz"})) > 0
+    assert goz[260, 256] and goz[260, 200] and not goz[380, 256] and not goz[600, 256]
+    alt = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"alt_yuz"})) > 0
+    assert alt[400, 256] and alt[350, 256] and not alt[200, 256]
+    sac = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"sac"})) > 0
+    assert sac[20, 256] and sac[300, 20] and not sac[300, 256]
+    birlesik = np.array(yuz_bolge_maskesi(kps, bbox, (512, 640), {"goz", "alt_yuz"})) > 0
+    assert birlesik.sum() >= max(goz.sum(), alt.sum())
