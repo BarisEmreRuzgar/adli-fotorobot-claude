@@ -345,3 +345,10 @@ def test_sakalsiz_erkekte_erkeklik_vurgulanir(ornek_erkek):
 
     kadin_poz, _ = prompt_olustur(varsayilan_ozellikler("female"))
     assert "masculine" not in kadin_poz
+
+
+def test_sari_sac_yellow_yazilsa_da_blonde_olur(ornek_erkek):
+    oz = normalize({"sac": "short Yellow hair with receding hairline"}, temel=ornek_erkek)
+    assert oz["sac"] == "short blonde hair with receding hairline"
+    poz, _ = prompt_olustur(oz, onceki=ornek_erkek)
+    assert "dyed blonde hair" in poz

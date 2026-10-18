@@ -126,6 +126,9 @@ def normalize(ham, temel=None):
     for alan in ALANLAR:
         sonuc.setdefault(alan, VARSAYILAN[alan])
     sonuc["yas"] = _yas_normalize(sonuc["yas"], VARSAYILAN["yas"])
+    # Gemini (özellikle yedek model) "sarı saç"ı "yellow hair" yazabiliyor; SD buna zayıf
+    # tepki veriyor ve renk değişikliği vurgusu da yalnızca "blonde"u tanıyor
+    sonuc["sac"] = re.sub(r"\byellow\b", "blonde", sonuc["sac"], flags=re.IGNORECASE)
     if sonuc["cinsiyet"] == "female" and _sakal_var_mi(sonuc["sakal"]):
         sonuc["sakal"] = ""
     return sonuc
@@ -182,7 +185,7 @@ def _yuzde_olmayan_kelimeler(eski, yeni):
     return [k for k in re.findall(r"[a-z-]+", (eski or "").lower()) if k not in yeni_k and k not in bos]
 
 
-SAC_RENKLERI = {"blonde", "platinum", "red", "ginger", "auburn", "black", "brown", "chestnut",
+SAC_RENKLERI = {"blonde", "golden", "platinum", "red", "ginger", "auburn", "black", "brown", "chestnut",
                 "grey", "gray", "white", "silver", "greying"}
 
 DEGISIM_ALANLARI = ("sac", "sakal", "goz", "aksesuar", "ozel", "ten", "kas", "yuz_sekli", "burun",
