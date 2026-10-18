@@ -98,11 +98,11 @@ Aynı tanık ifadesi her seferinde aynı analizi verir: Gemini yanıtları `cikt
 
 **Aşama 3: Bölgesel ayrıntı**
 1. Ayrıntının olacağı yere görsel üzerinde tıklayın (örneğin sol kaşın üstü). Uzun bir iz için başından sonuna birkaç noktaya tıklayın; noktalar fırça kalınlığında çizgiyle birleşir. İşaretli bölge kırmızı görünür.
-2. **Hazır ayrıntı** listesinden seçin veya İngilizce yazın (`thin pale healed scar on the skin`).
+2. **Hazır ayrıntı** listesinden seçin veya İngilizce, kısa bir nesne adıyla yazın (`dark brown mole`). Uygulama tarifi ağırlıklandırır (`(... :1.35)`); "close-up of human skin" gibi cilt tarifleri modeli düz cilde iter.
 3. **🖌️ Bölgeyi yeniden çiz**: yalnızca işaretli bölge (çevresiyle kırpılıp büyütülerek) yeniden çizilir; yüzün geri kalanı piksel piksel korunur. Prompt kısa olduğu için 77 token sınırına takılmaz.
 4. Başka bir ayrıntı için sonucu **↪️ yeni kaynak yap** ile seçip yeni bölgeyi işaretleyin.
 
-Colab testinde (T4) yara izi ancak geniş fırça (yarıçap 12-14), belirgin tarif (`prominent visible ...`), CFG 8 ve değişim gücü 1.0 ile çizildi; sade tarif ve CFG 6 ile bölge düz cilt olarak yeniden çiziliyordu. Varsayılanlar buna göre ayarlıdır. Maskenin dışındaki piksel farkı 0.01'in altında, kimlik benzerliği %99+ ölçüldü. Maskeler de vaka kaydına yazılır.
+Colab testinde (T4, 5 tohum) ben, varsayılan fırça (yarıçap 9) ve ağırlık 1.35 ile 5/5 doğal çizildi; ağırlık 1.6'da iri ve yara gibi oluyor. **Yara izi henüz güvenilir değil**: ağırlıklı tariflerde dövme ya da şerit gibi yapay çizgiler çıkıyor, bunları engelleyen negatifler izi de siliyor (en iyi sonuç 1/5). ControlNet inpaint ve 9 kanallı inpainting modeli denendi, ikisi de yeni ayrıntıyı bastırdığı için eklenmedi. Birkaç varyasyon üretip en doğal olanı seçin. Maskenin dışındaki piksel farkı 0.01'in altında, kimlik benzerliği %99+ ölçüldü. Maskeler de vaka kaydına yazılır.
 
 ---
 
