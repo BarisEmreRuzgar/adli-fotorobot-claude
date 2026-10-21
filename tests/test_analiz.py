@@ -72,7 +72,7 @@ def test_gozluk_goz_ile_karismaz():
 def test_kel_ve_biyik():
     oz = ozellik_cikar("Yaşlı bir amca, kel, beyaz pala bıyıklı, kalın kaşlı, kilolu.")
     assert oz["sac"] == "bald shaved head"
-    assert oz["sakal"] == "thick mustache"
+    assert oz["sakal"] == "white thick mustache"
     assert oz["kas"] == "thick eyebrows"
     assert oz["yuz_sekli"] == "chubby round face"
 
@@ -523,3 +523,11 @@ def test_ben_noktasi_kisinin_soluna_goruntunun_sagina_cizer():
 def test_kural_analiz_kas_ustu_beni_tarafli():
     oz = ifade_analiz("Sağ kaşının üstünde belirgin ben var.")[0]
     assert "mole above right eyebrow" in oz["ozel"]
+
+
+def test_biyik_rengi_ve_belirtme_hali():
+    assert ozellik_cikar("pala bıyıkları beyazdı")["sakal"] == "white thick mustache"
+    assert ozellik_cikar("siyah saçlı, ince bıyıklı")["sakal"] == "thin mustache"
+    oz = normalize({"cinsiyet": "male"})
+    assert degisiklik_uygula(oz, "burnunu kemerli yap")[0]["burun"] == "aquiline hooked nose"
+    assert degisiklik_uygula(oz, "çenesini sivri yap")[0]["cene"] == "pointed chin"

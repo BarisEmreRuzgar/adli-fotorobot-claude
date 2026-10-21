@@ -219,3 +219,7 @@ __marimo__/
 
 # Adli Fotorobot çıktıları
 ciktilar/
+
+# Deney çıktıları
+deneyler/sonuc/
+deneyler/*.log

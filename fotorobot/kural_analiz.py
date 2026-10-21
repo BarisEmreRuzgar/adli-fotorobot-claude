@@ -149,7 +149,7 @@ def _cumlecikler(metin):
 
 
 _KOKLER = ("saç", "göz", "kaş", "burun", "burn", "dudak", "dudağ", "çene",
-           "yüz", "ten", "cilt", "cild", "sakal")
+           "yüz", "ten", "cilt", "cild", "sakal", "bıyık", "bıyığ")
 
 
 def _iyelik_mi(kelime):
@@ -157,7 +157,9 @@ def _iyelik_mi(kelime):
     for kok in sorted(_KOKLER, key=len, reverse=True):
         if k.startswith(kok):
             ek = k[len(kok):]
-            return bool(re.fullmatch(r"(?:ı|i|u|ü|sı|si|su|sü|ları|leri|lar|ler)", ek))
+            # İyelik/çoğul ("saçları siyah") ve komutlardaki belirtme hali ("burnunu kemerli yap")
+            return bool(re.fullmatch(r"(?:ı|i|u|ü|sı|si|su|sü|ları|leri|lar|ler"
+                                     r"|ını|ini|unu|ünü|sını|sini|sunu|sünü|larını|lerini)", ek))
     return False
 
 
@@ -332,6 +334,11 @@ def _sakal(m):
     else:
         biyik = None
     if biyik:
+        # "beyaz pala bıyıklı", "bıyıkları beyazdı": rengi bıyığın kendi penceresinden al
+        pencere = " ".join(p for c in _cumlecikler(m) for p in _pencereler(c, r"bıyı[kğ]\w*"))
+        renk = _bul(pencere, RENK_SAC, tek=True)
+        if renk and renk[0] not in (sakal or ""):
+            biyik = f"{renk[0]} {biyik}"
         if not sakal or sakal == "clean shaven":
             return biyik
         if "beard" in sakal:
