@@ -69,6 +69,8 @@ class Ayarlar:
     bolgesel_duzenleme: bool = _env_bool("FOTOROBOT_REGIONAL_EDIT", True)
     # Aşama 1'de yeri belli benleri prompt yerine yüz noktalarına göre Aşama 3 ile çiz
     otomatik_ben: bool = _env_bool("FOTOROBOT_AUTO_MOLE", True)
+    # Prompt'un tutturamadığı saç/sakal rengini ve yeri belli yara izlerini piksel düzeyinde işle
+    otomatik_rotus: bool = _env_bool("FOTOROBOT_AUTO_RETOUCH", True)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

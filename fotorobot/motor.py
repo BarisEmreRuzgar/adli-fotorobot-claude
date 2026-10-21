@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from .config import Ayarlar
-from .ozellikler import BLOK_AYIRICI, agirliklari_ayir
+from .ozellikler import BLOK_AYIRICI, agirlikli, agirliklari_ayir
 
 FACEID_ADAPTOR = "faceid_0"
 # Yalnızca tespit, kimlik (ArcFace) ve yaş/cinsiyet modelleri gerekli
@@ -581,3 +581,63 @@ class Motor:
                 sonuclar.append((cikti, t, benzerlik))
         self._bellek_temizle()
         return sonuclar
+
+    # ── Rötuş ──────────────────────────────────────────────────────────
+
+    def _incelt(self, gorsel, maske, pozitif, guc, tohum, adim, ek_negatif=""):
+        """Boyanan/çizilen bölgeyi düşük güçle yeniden çizip doğallaştırır."""
+        from PIL import ImageFilter
+
+        from . import rotus
+
+        if not isinstance(maske, Image.Image):
+            maske = Image.fromarray((np.asarray(maske) > 0).astype(np.uint8) * 255)
+        maske = maske.convert("L").filter(ImageFilter.MaxFilter(7))
+        negatif = rotus.INCELTME_NEGATIFI + (", " + ek_negatif if ek_negatif else "")
+        return self.bolge_duzenle(gorsel, maske, pozitif, negatif, adet=1, tohum=tohum,
+                                  adim=adim, cfg=6.0, guc=guc)[0][0]
+
+    def rotus_uygula(self, gorsel, oz, tohum=0, adim=25, yaralar=(), renk=True):
+        """SD 1.5'in prompt'la tutturamadığı saç/sakal rengini ve yara izlerini görüntüye işler.
+
+        Renk yalnızca üretilen renk istenenden belirgin farklıysa (rotus.RENK_ESIGI) değişir.
+        `yaralar`: [(yer, taraf), ...] (rotus.yara_konumlari). Yüz bulunamazsa görsel aynen döner.
+        Dönüş: (görsel, yapılanların listesi).
+        """
+        from . import rotus
+
+        yuz = self.yuz_bul(gorsel)
+        if yuz is None:
+            return gorsel, []
+        harita = rotus.ayristir(gorsel)
+        yapilan = []
+        if renk:
+            sac_renk = rotus.renk_bul(oz.get("sac"))
+            if sac_renk and "bald" not in (oz.get("sac") or ""):
+                olc = rotus.sac_rengi_olc(gorsel, harita)
+                if olc is not None and rotus.renk_farki(olc, sac_renk) > rotus.RENK_ESIGI:
+                    boyali, maske = rotus.sac_boya(gorsel, harita, sac_renk)
+                    if boyali is not None:
+                        gorsel = self._incelt(boyali, maske, f"{agirlikli(sac_renk + ' hair', 1.2)}, "
+                                              "natural hair texture, photo", rotus.SAC_INCELTME, tohum, adim)
+                        yapilan.append(f"saç rengi → {sac_renk}")
+            sakal = oz.get("sakal") or ""
+            sakal_renk = rotus.renk_bul(sakal)
+            if sakal_renk and oz.get("cinsiyet") != "female":
+                biyik = rotus.yalniz_biyik_mi(sakal)
+                olc = rotus.sakal_rengi_olc(gorsel, yuz.kps, harita, biyik)
+                if olc is not None and rotus.renk_farki(olc, sakal_renk) > rotus.RENK_ESIGI:
+                    boyali, maske = rotus.sakal_boya(gorsel, yuz.kps, harita, sakal_renk, biyik)
+                    if boyali is not None:
+                        acik = sakal_renk in ("white", "silver", "grey", "gray", "salt and pepper")
+                        gorsel = self._incelt(boyali, maske, f"{agirlikli(sakal, 1.15)}, natural facial hair "
+                                              "strands, photo", rotus.SAKAL_INCELTME, tohum, adim,
+                                              rotus.ACIK_RENK_NEGATIFI if acik else "")
+                        yapilan.append(f"{'bıyık' if biyik else 'sakal'} rengi → {sakal_renk}")
+        for i, (yer, taraf) in enumerate(yaralar):
+            yol = rotus.yara_yolu(yuz.kps, yer, taraf)
+            cizili, maske = rotus.yara_ciz(gorsel, yuz.kps, yol, harita, tohum=tohum + i)
+            gorsel = self._incelt(cizili, maske, f"{agirlikli('healed scar', 1.1)}, skin, photo",
+                                  rotus.YARA_INCELTME, tohum + i, adim)
+            yapilan.append(f"yara izi ({yer}{', ' + taraf if taraf else ''})")
+        return gorsel, yapilan

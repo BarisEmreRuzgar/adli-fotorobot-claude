@@ -9,6 +9,7 @@ from .config import Ayarlar, api_anahtari_bul
 from .gemini import Gemini
 from .kayit import VakaKaydi, gorsel_ac, yeni_vaka_id
 from .motor import ben_noktasi
+from .rotus import yara_konumlari
 from .ozellikler import (
     ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, ben_konumlari, bolge_promptu, degisiklik_bolgeleri,
     normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler,
@@ -133,6 +134,18 @@ def _hata_metni(e):
     return f"❌ Hata: {mesaj[:500]}"
 
 
+def _rotus_raporu(rotuslar):
+    """Varyasyon başına rötuş listelerinden rapor satırları."""
+    sayac = {}
+    for yapilan in rotuslar:
+        for y in yapilan:
+            sayac[y] = sayac.get(y, 0) + 1
+    if not sayac:
+        return []
+    return ["🎨 Rötuş (prompt'un tutturamadığı ayrıntı piksel düzeyinde işlendi): "
+            + ", ".join(f"{y} · {n}/{len(rotuslar)} yüzde" for y, n in sayac.items())]
+
+
 class Uygulama:
     def __init__(self, motor, ayarlar=None, gemini=None):
         self.motor = motor
@@ -189,10 +202,13 @@ class Uygulama:
         if not self.motor.hazir:
             return gr.update(), [], "❌ Modeller yüklenemedi; konsoldaki hatayı kontrol edin.", vaka_id
         oz = tablodan_oz(tablo)
-        benler = []
+        benler, yaralar, kalan = [], [], oz["ozel"]
         if self.ayarlar.otomatik_ben:
-            kalan, benler = ben_konumlari(oz["ozel"])
-        pozitif, negatif = prompt_olustur(dict(oz, ozel=kalan) if benler else oz)
+            kalan, benler = ben_konumlari(kalan)
+        if self.ayarlar.otomatik_rotus:
+            # Prompt'taki yara izi turuncu leke/dövme gibi çiziliyordu; yeri belliyse rötuşla çizilir
+            kalan, yaralar = yara_konumlari(kalan)
+        pozitif, negatif = prompt_olustur(dict(oz, ozel=kalan) if benler or yaralar else oz)
         vaka_id = vaka_id or yeni_vaka_id()
         kayit = self._kayit(vaka_id)
         try:
@@ -201,6 +217,7 @@ class Uygulama:
                 ilerleme=lambda o, m: progress(o, desc=m),
             )
             cizilen = self._benleri_ciz(sonuclar, benler, int(adim), progress) if benler else 0
+            rotuslar = self._rotus(sonuclar, oz, yaralar, int(adim), progress)                 if self.ayarlar.otomatik_rotus else []
         except Exception as e:  # noqa: BLE001
             return gr.update(), [], _hata_metni(e), vaka_id
         galeri, liste = [], []
@@ -213,12 +230,14 @@ class Uygulama:
             "tohumlar": [t for _, t in sonuclar], "adim": int(adim), "cfg": float(cfg),
             "gorseller": [x["yol"] for x in liste],
             "otomatik_benler": [{"yer": y, "taraf": tr} for y, tr in benler],
+            "rotuslar": rotuslar,
         })
         rapor = [f"✅ {len(sonuclar)} varyasyon üretildi · Vaka: {vaka_id}"]
         if benler:
             yerler = ", ".join(BEN_YER_ADLARI[y] + (f" ({'sağ' if tr == 'sag' else 'sol'})" if tr else "")
                                for y, tr in benler)
             rapor.append(f"🖌️ Ben yüz noktalarına göre çizildi: {yerler} · {cizilen}/{len(sonuclar)} yüzde")
+        rapor += _rotus_raporu(rotuslar)
         rapor += ["", "Prompt:", pozitif]
         return galeri, liste, "\n".join(rapor), vaka_id
 
@@ -239,6 +258,22 @@ class Uygulama:
             sonuclar[i] = (yeni[0][0], t)
             cizilen += 1
         return cizilen
+
+    def _rotus(self, sonuclar, oz, yaralar, adim, progress, benzerlik_kaynagi=None):
+        """Her varyasyona rötuş uygular (sonuclar yerinde güncellenir). Dönüş: varyasyon başına yapılanlar."""
+        yapilanlar = []
+        for i, sonuc in enumerate(sonuclar):
+            progress(i / len(sonuclar), desc=f"Renk/iz rötuşu ({i + 1}/{len(sonuclar)})")
+            gorsel, t = sonuc[0], sonuc[1]
+            yeni, yapilan = self.motor.rotus_uygula(gorsel, oz, tohum=t, adim=adim, yaralar=yaralar)
+            if yapilan:
+                if benzerlik_kaynagi is not None:
+                    sonuc = (yeni, t, self.motor.kimlik_benzerligi(None, yeni, yuz_a=benzerlik_kaynagi))
+                else:
+                    sonuc = (yeni,) + tuple(sonuc[1:])
+                sonuclar[i] = sonuc
+            yapilanlar.append(yapilan)
+        return yapilanlar
 
     def analiz_ve_uret(self, ifade, vaka_id, adet, adim, cfg, tohum, progress=gr.Progress()):
         tablo, analiz_raporu, oz, uyari, tahmin = self.analiz_et(ifade)
@@ -322,8 +357,19 @@ class Uygulama:
         # Kimlik ilk yüzden alınır; ona göre biriken değişiklikler de vurgulanır ve
         # saçı o yüzden farklıysa kırpıntıdaki saç maskelenir
         kimlik_oz = (gecmis[0].get("oz") if gecmis else None) or kaynak_oz
-        pozitif, negatif = prompt_olustur(yeni_oz, onceki=kaynak_oz, referans=kimlik_oz)
-        bolgeler = degisiklik_bolgeleri(kaynak_oz, yeni_oz) if self.ayarlar.bolgesel_duzenleme else None
+        # Yeri belli yara izleri prompt'a yazılmaz (turuncu leke/dövme gibi çıkıyordu): görüntüdeki
+        # izler img2img/bölgesel düzenlemeyle korunur, yeni eklenenler rötuşla çizilir
+        uretim_yeni, uretim_kaynak, uretim_kimlik, yeni_yaralar = yeni_oz, kaynak_oz, kimlik_oz, []
+        if self.ayarlar.otomatik_rotus:
+            kalan_yeni, yaralar_yeni = yara_konumlari(yeni_oz["ozel"])
+            kalan_eski, yaralar_eski = yara_konumlari(kaynak_oz["ozel"])
+            yeni_yaralar = [y for y in yaralar_yeni if y not in yaralar_eski]
+            uretim_yeni = dict(yeni_oz, ozel=kalan_yeni)
+            uretim_kaynak = dict(kaynak_oz, ozel=kalan_eski)
+            uretim_kimlik = dict(kimlik_oz, ozel=yara_konumlari(kimlik_oz.get("ozel"))[0])
+        pozitif, negatif = prompt_olustur(uretim_yeni, onceki=uretim_kaynak, referans=uretim_kimlik)
+        bolgeler = degisiklik_bolgeleri(uretim_kaynak, uretim_yeni) if self.ayarlar.bolgesel_duzenleme else None
+        yalniz_iz = uretim_yeni == uretim_kaynak and bool(yeni_yaralar)
         sac_maskele = yeni_oz["sac"] != kimlik_oz.get("sac")
         if sac_maskele:
             rapor.append("ℹ️ Saç değiştiği için kimlik kırpıntısında saç bölgesi maskelendi.")
@@ -337,12 +383,24 @@ class Uygulama:
         vaka_id = vaka_id or yeni_vaka_id()
         kayit = self._kayit(vaka_id)
         try:
-            sonuclar, _ = self.motor.kimlik_koruyarak_uret(
-                kaynak_pil, pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim),
-                cfg=float(cfg), kimlik_gucu=float(kimlik_gucu), degisim=float(degisim),
-                kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele, bolgeler=bolgeler,
-                ilerleme=lambda o, m: progress(o, desc=m),
-            )
+            if yalniz_iz:
+                # Yalnızca yara izi ekleniyor: yüz yeniden üretilmez, iz kaynağın üzerine çizilir
+                rapor.append("ℹ️ Yalnızca yara izi eklendiği için yüz yeniden üretilmedi.")
+                sonuclar = [(kaynak_pil.convert("RGB"), t, None)
+                            for t in self.motor._tohumlar(int(tohum), int(adet))]
+            else:
+                sonuclar, _ = self.motor.kimlik_koruyarak_uret(
+                    kaynak_pil, pozitif, negatif, adet=int(adet), tohum=int(tohum), adim=int(adim),
+                    cfg=float(cfg), kimlik_gucu=float(kimlik_gucu), degisim=float(degisim),
+                    kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele, bolgeler=bolgeler,
+                    ilerleme=lambda o, m: progress(o, desc=m),
+                )
+            rotuslar = []
+            if self.ayarlar.otomatik_rotus:
+                kimlik_yuzu = self.motor.yuz_bul(gorsel_ac(kimlik_ref) or kaynak_pil)
+                rotuslar = self._rotus(sonuclar, yeni_oz, yeni_yaralar, int(adim), progress,
+                                       benzerlik_kaynagi=kimlik_yuzu)
+                rapor += _rotus_raporu(rotuslar)
         except Exception as e:  # noqa: BLE001
             return [], [], "\n".join(rapor + [_hata_metni(e)]), vaka_id
         galeri, liste = [], []

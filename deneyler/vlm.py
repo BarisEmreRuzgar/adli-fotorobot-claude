@@ -9,8 +9,12 @@ import json
 import os
 import time
 
-MODELLER = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3-flash-preview"]
+# Ücretsiz katmanda her modelin ayrı günlük kotası var (20 istek); sırayla harcanır
+MODELLER = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+            "gemini-3-flash-preview", "gemini-flash-latest", "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
 _istemci = None
+_kota_bitti = set()  # günlük kotası dolan modeller bu çalıştırmada bir daha denenmez
 
 
 def _client():
@@ -46,7 +50,7 @@ def denetle(gorsel, iddialar, deneme=4):
     metin = SORU.format(iddialar="\n".join(f"{i + 1}. {c}" for i, c in enumerate(iddialar)))
     son_hata = None
     for _ in range(deneme):
-        for model in MODELLER:
+        for model in [m for m in MODELLER if m not in _kota_bitti]:
             try:
                 r = _client().models.generate_content(
                     model=model, contents=[parca, metin],
@@ -58,5 +62,9 @@ def denetle(gorsel, iddialar, deneme=4):
                 return sonuc
             except Exception as e:  # noqa: BLE001 - kota/yoğunluk: sıradaki modeli dene
                 son_hata = e
+                if "RESOURCE_EXHAUSTED" in str(e) or "NOT_FOUND" in str(e):
+                    _kota_bitti.add(model)
+        if len(_kota_bitti) == len(MODELLER):
+            break
         time.sleep(10)
     return {"kontroller": [], "gercekcilik": None, "not": f"denetim başarısız: {son_hata}"}

@@ -23,17 +23,21 @@ SINIF = {"background": 0, "skin": 1, "nose": 2, "eye_g": 3, "l_eye": 4, "r_eye":
 RENKLER = {
     "platinum blonde": (84, 1, 14), "salt and pepper": (55, 0, 3), "jet black": (10, 0, 0),
     "dark brown": (22, 5, 9), "light brown": (46, 8, 19), "chestnut brown": (32, 13, 18),
-    "red ginger": (45, 28, 38), "white": (88, 0, 3), "silver": (76, 0, 2), "grey": (64, 0, 3),
-    "gray": (64, 0, 3), "greying": (55, 1, 6), "blonde": (70, 6, 32), "golden": (66, 9, 40),
+    "red ginger": (45, 28, 38), "white": (79, 0, 4), "silver": (72, 0, 2), "grey": (62, 0, 3),
+    "gray": (62, 0, 3), "greying": (55, 1, 6), "blonde": (70, 6, 32), "golden": (66, 9, 40),
     "auburn": (34, 22, 24), "ginger": (48, 26, 38), "red": (40, 30, 30), "black": (13, 1, 1),
     "brown": (30, 8, 14),
 }
 # Ölçülen renk hedeften bu kadar (ΔE) uzaksa boyanır; yakınsa model zaten tutturmuştur
 RENK_ESIGI = 15.0
 # Boyama sonrası doğallaştırma gücü. Düşük: renk kalır ama boyalı görünür; yüksek: renk kaybolur.
-SAC_INCELTME = 0.4
-SAKAL_INCELTME = 0.35
+SAC_INCELTME = 0.45
+SAKAL_INCELTME = 0.6
 YARA_INCELTME = 0.3
+# Beyaz/gri kıl inceltmede sarı-kızıla kayıyordu (Aşama 1 testi, bıyık); bu renklerde negatife eklenir
+ACIK_RENK_NEGATIFI = "blonde, yellow, golden, ginger, orange, brown"
+INCELTME_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
+                     "makeup, tattoo, ink, stripes, tape, bandage")
 
 _ayristirici = None
 
@@ -124,16 +128,23 @@ def _noktalar(kps):
     return lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, max(abs(rx - lx), 1.0)
 
 
-def sakal_bolgesi(kps, boyut, harita):
-    """Bıyık + sakal + çene + favoriler (dudak, burun, göz hariç), bool (H, W)."""
+def sakal_bolgesi(kps, boyut, harita, yalniz_biyik=False):
+    """Bıyık + sakal + çene + favoriler (dudak, burun, göz hariç), yumuşak (H, W) ağırlık.
+    `yalniz_biyik`: yalnızca üst dudak ve ağız kenarları (pala bıyığın uçları dahil)."""
     lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, d = _noktalar(kps)
     my = (mly + mry) / 2
     m = Image.new("L", boyut, 0)
-    ImageDraw.Draw(m).polygon([
-        (lx - 0.75 * d, ly + 0.25 * d), (lx - 0.35 * d, ny + 0.05 * d), (nx, ny + 0.02 * d),
-        (rx + 0.35 * d, ny + 0.05 * d), (rx + 0.75 * d, ry + 0.25 * d), (rx + 0.6 * d, my + 0.6 * d),
-        (mrx + 0.2 * d, my + 1.05 * d), ((mlx + mrx) / 2, my + 1.2 * d), (mlx - 0.2 * d, my + 1.05 * d),
-        (lx - 0.6 * d, my + 0.6 * d)], fill=255)
+    if yalniz_biyik:
+        ImageDraw.Draw(m).polygon([
+            (mlx - 0.3 * d, ny + 0.02 * d), (mrx + 0.3 * d, ny + 0.02 * d), (mrx + 0.45 * d, my + 0.15 * d),
+            (mrx + 0.35 * d, my + 0.55 * d), (mrx + 0.1 * d, my + 0.1 * d), (mlx - 0.1 * d, my + 0.1 * d),
+            (mlx - 0.35 * d, my + 0.55 * d), (mlx - 0.45 * d, my + 0.15 * d)], fill=255)
+    else:
+        ImageDraw.Draw(m).polygon([
+            (lx - 0.75 * d, ly + 0.25 * d), (lx - 0.35 * d, ny + 0.05 * d), (nx, ny + 0.02 * d),
+            (rx + 0.35 * d, ny + 0.05 * d), (rx + 0.75 * d, ry + 0.25 * d), (rx + 0.6 * d, my + 0.6 * d),
+            (mrx + 0.2 * d, my + 1.05 * d), ((mlx + mrx) / 2, my + 1.2 * d), (mlx - 0.2 * d, my + 1.05 * d),
+            (lx - 0.6 * d, my + 0.6 * d)], fill=255)
     # Sınır sert olursa boyanan sakal yanakta yatay bir çizgiyle kesiliyordu: yumuşak geçiş
     bolge = np.asarray(m.filter(ImageFilter.GaussianBlur(0.12 * d)), dtype=np.float64) / 255
     # Boyun (çene altı gölgesi koyu olduğu için kıl sanılıyordu) ve saç dışındaki her şey hariç
@@ -156,10 +167,10 @@ def sac_rengi_olc(gorsel, harita):
     return _ortanca(lab, harita == SINIF["hair"])
 
 
-def sakal_kilini_bul(lab, kps, harita):
+def sakal_kilini_bul(lab, kps, harita, yalniz_biyik=False):
     """Sakal bölgesinde cilde göre koyu (kıl) piksellerin yumuşak ağırlığı ve cilt rengi."""
     cilt = yanak_cildi(lab, kps, harita)
-    bolge = sakal_bolgesi(kps, harita.shape[::-1], harita)
+    bolge = sakal_bolgesi(kps, harita.shape[::-1], harita, yalniz_biyik)
     if cilt is None or (bolge > 0.5).sum() < 50:
         return None, None
     # Kıl, aynı ışıktaki cilde göre koyudur; 6 birimden koyular kıl sayılmaya başlar
@@ -186,9 +197,15 @@ def sac_boya(gorsel, harita, renk):
     return Image.fromarray(lab_rgb(yeni)), maske
 
 
-def sakal_boya(gorsel, kps, harita, renk):
+def yalniz_biyik_mi(sakal):
+    s = (sakal or "").lower()
+    return ("mustache" in s or "moustache" in s) and not any(k in s for k in ("beard", "goatee", "stubble"))
+
+
+def sakal_boya(gorsel, kps, harita, renk, yalniz_biyik=False):
+    """Sakal/bıyık kıllarını `renk`e boyar; `yalniz_biyik` ise çene ve yanaklara dokunulmaz."""
     lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
-    agirlik, _ = sakal_kilini_bul(lab, kps, harita)
+    agirlik, _ = sakal_kilini_bul(lab, kps, harita, yalniz_biyik)
     if agirlik is None:
         return None, None
     kil = agirlik > 0.3
@@ -197,8 +214,16 @@ def sakal_boya(gorsel, kps, harita, renk):
     if renk == "salt and pepper":
         # Kırçıl: kılların yarısı (açık olanlar) griye, koyular olduğu gibi
         agirlik = agirlik * (lab[..., 0] > ort[0])
-    yeni = _boya(lab, agirlik, ort, hedef, doku=0.6)
+    # Beyaz/gri kıllar arasındaki gölgeler kalmalı; düz boya "pamuk" gibi görünüyordu
+    yeni = _boya(lab, agirlik, ort, hedef, doku=0.85)
     return Image.fromarray(lab_rgb(yeni)), kil
+
+
+def sakal_rengi_olc(gorsel, kps, harita, yalniz_biyik=False):
+    """Sakal/bıyık kıllarının ortanca Lab rengi; kıl bulunamazsa None."""
+    lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
+    agirlik, _ = sakal_kilini_bul(lab, kps, harita, yalniz_biyik)
+    return None if agirlik is None else _ortanca(lab, agirlik > 0.3)
 
 
 def renk_farki(olculen, renk):

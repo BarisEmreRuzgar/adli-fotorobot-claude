@@ -58,10 +58,10 @@ for anahtar in SECILI:
                     isler.append((b, m, f"{agirlikli(sac_renk + ' hair', 1.2)}, natural hair texture, photo"))
         sakal_renk = rotus.renk_bul(oz["sakal"])
         if sakal_renk:
-            b, m = rotus.sakal_boya(isler[-1][0] if isler else im, yuz.kps, harita, sakal_renk)
+            b, m = rotus.sakal_boya(isler[-1][0] if isler else im, yuz.kps, harita, sakal_renk,
+                                    rotus.yalniz_biyik_mi(oz["sakal"]))
             if b is not None:
-                kim = "beard and mustache" if "beard" in oz["sakal"] else "mustache"
-                isler.append((b, m, f"{agirlikli(sakal_renk + ' ' + kim, 1.2)}, natural facial hair, photo"))
+                isler.append((b, m, f"{agirlikli(oz['sakal'], 1.15)}, natural facial hair strands, photo"))
         _, yaralar = rotus.yara_konumlari(oz["ozel"])
         for yer, taraf in yaralar:
             b, m = rotus.yara_ciz(isler[-1][0] if isler else im, yuz.kps,
