@@ -28,7 +28,11 @@ def _client():
                 anahtarlar.ortama_yukle()
             except ImportError:
                 pass
-        _istemci = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+        from google.genai import types
+
+        # Zaman aşımı olmadan yanıtsız kalan bir istek deneyi saatlerce kilitliyordu
+        _istemci = genai.Client(api_key=os.environ["GOOGLE_API_KEY"],
+                                http_options=types.HttpOptions(timeout=60_000))
     return _istemci
 
 
