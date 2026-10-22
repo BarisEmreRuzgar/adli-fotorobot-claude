@@ -259,13 +259,13 @@ class Uygulama:
             cizilen += 1
         return cizilen
 
-    def _rotus(self, sonuclar, oz, yaralar, adim, progress, benzerlik_kaynagi=None):
+    def _rotus(self, sonuclar, oz, yaralar, adim, progress, benzerlik_kaynagi=None, atla=()):
         """Her varyasyona rötuş uygular (sonuclar yerinde güncellenir). Dönüş: varyasyon başına yapılanlar."""
         yapilanlar = []
         for i, sonuc in enumerate(sonuclar):
             progress(i / len(sonuclar), desc=f"Renk/iz rötuşu ({i + 1}/{len(sonuclar)})")
             gorsel, t = sonuc[0], sonuc[1]
-            yeni, yapilan = self.motor.rotus_uygula(gorsel, oz, tohum=t, adim=adim, yaralar=yaralar)
+            yeni, yapilan = self.motor.rotus_uygula(gorsel, oz, tohum=t, adim=adim, yaralar=yaralar, atla=atla)
             if yapilan:
                 if benzerlik_kaynagi is not None:
                     sonuc = (yeni, t, self.motor.kimlik_benzerligi(None, yeni, yuz_a=benzerlik_kaynagi))
@@ -411,8 +411,9 @@ class Uygulama:
                 rapor.append("🖌️ FaceID'siz yerel çizim: " + ", ".join(y["ad"] for y in yereller))
             rotuslar = []
             if self.ayarlar.otomatik_rotus:
+                # Yerel çizimle rengi istenerek çizilen sakal yeniden boyanınca sprey boya gibi duruyordu
                 rotuslar = self._rotus(sonuclar, yeni_oz, yeni_yaralar, int(adim), progress,
-                                       benzerlik_kaynagi=kimlik_yuzu)
+                                       benzerlik_kaynagi=kimlik_yuzu, atla=yerel_alanlar)
                 rapor += _rotus_raporu(rotuslar)
         except Exception as e:  # noqa: BLE001
             return [], [], "\n".join(rapor + [_hata_metni(e)]), vaka_id

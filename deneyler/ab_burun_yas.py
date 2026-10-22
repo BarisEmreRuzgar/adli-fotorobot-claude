@@ -44,15 +44,16 @@ kaynak = Image.open(kaynak_yol).convert("RGB")
 yuz = mo.yuz_bul(kaynak)
 burun_m = yuz_bolge_maskesi(yuz.kps, yuz.bbox, kaynak.size, ["burun"])
 yas_m = yas_maskeleri(yuz.kps, yuz.bbox, kaynak.size)
-VARYANTLAR = [  # (ad, iddia, maske, tarif, ağırlık, güç, cfg) — maske None: tam görüntü img2img
-    ("burun g0.75", "nose", burun_m, "aquiline hooked nose with a prominent bump on the nose bridge", 1.25, 0.75, 7.0),
-    ("burun g0.9", "nose", burun_m, "aquiline hooked nose with a prominent bump on the nose bridge", 1.25, 0.9, 7.0),
-    ("yas bolge g0.55", "yas", yas_m, "50 year old man, deep forehead wrinkles, crow's feet, under-eye bags, "
-     "nasolabial folds, aged skin", 1.2, 0.55, 7.0),
-    ("yas bolge g0.7", "yas", yas_m, "50 year old man, deep forehead wrinkles, crow's feet, under-eye bags, "
-     "nasolabial folds, aged skin", 1.2, 0.7, 7.0),
-    ("yas tam i2i g0.45", "yas", None, "50 year old middle-aged man, wrinkles, crow's feet, aged skin, "
-     "greying temples", 1.2, 0.45, 6.5),
+(lx, ly), (rx, ry), (nx, ny) = [tuple(map(float, p)) for p in yuz.kps[:3]]
+_d = rx - lx
+burun_genis = Image.new("L", kaynak.size, 0)
+ImageDraw.Draw(burun_genis).ellipse((nx - 0.5 * _d, (ly + ry) / 2 - 0.25 * _d, nx + 0.5 * _d, ny + 0.4 * _d), fill=255)
+TARIF = ("large aquiline roman nose, prominent bony bump on the nose bridge catching the light, "
+         "long nose with a downward pointing tip")
+VARYANTLAR = [  # (ad, iddia, maske, tarif, ağırlık, güç, cfg)
+    ("burun genis g1.0 c8", "nose", burun_genis, TARIF, 1.3, 1.0, 8.0),
+    ("burun genis g0.9 c7", "nose", burun_genis, TARIF, 1.2, 0.9, 7.0),
+    ("burun g1.0 c9", "nose", burun_m, TARIF, 1.4, 1.0, 9.0),
 ]
 IDDIA = {"nose": ["The man has a clearly hooked, aquiline nose with a visible bump on the bridge"],
          "yas": ["The man clearly looks about 50 years old (middle-aged, visible wrinkles)"]}

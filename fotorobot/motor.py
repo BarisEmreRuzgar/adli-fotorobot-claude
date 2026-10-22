@@ -621,11 +621,12 @@ class Motor:
         return self.bolge_duzenle(gorsel, maske, pozitif, negatif, adet=1, tohum=tohum,
                                   adim=adim, cfg=6.0, guc=guc)[0][0]
 
-    def rotus_uygula(self, gorsel, oz, tohum=0, adim=25, yaralar=(), renk=True):
+    def rotus_uygula(self, gorsel, oz, tohum=0, adim=25, yaralar=(), renk=True, atla=()):
         """SD 1.5'in prompt'la tutturamadığı saç/sakal rengini ve yara izlerini görüntüye işler.
 
         Renk yalnızca üretilen renk istenenden belirgin farklıysa (rotus.RENK_ESIGI) değişir.
-        `yaralar`: [(yer, taraf), ...] (rotus.yara_konumlari). Yüz bulunamazsa görsel aynen döner.
+        `yaralar`: [(yer, taraf), ...] (rotus.yara_konumlari). `atla`: rengine dokunulmayacak alanlar
+        ("sac", "sakal"); ör. sakal rengi zaten yerel çizimde istenmişse. Yüz bulunamazsa görsel aynen döner.
         Dönüş: (görsel, yapılanların listesi).
         """
         from . import rotus
@@ -637,7 +638,7 @@ class Motor:
         yapilan = []
         if renk:
             sac_renk = rotus.renk_bul(oz.get("sac"))
-            if sac_renk and "bald" not in (oz.get("sac") or ""):
+            if sac_renk and "bald" not in (oz.get("sac") or "") and "sac" not in atla:
                 olc = rotus.sac_rengi_olc(gorsel, harita)
                 if olc is not None and not rotus.renk_uyumlu(olc, sac_renk):
                     boyali, maske = rotus.sac_boya(gorsel, harita, sac_renk)
@@ -648,7 +649,7 @@ class Motor:
                         yapilan.append(f"saç rengi → {sac_renk}")
             sakal = oz.get("sakal") or ""
             sakal_renk = rotus.renk_bul(sakal)
-            if sakal_renk and oz.get("cinsiyet") != "female":
+            if sakal_renk and oz.get("cinsiyet") != "female" and "sakal" not in atla:
                 biyik = rotus.yalniz_biyik_mi(sakal)
                 olc = rotus.sakal_rengi_olc(gorsel, yuz.kps, harita, biyik)
                 if olc is not None and not rotus.renk_uyumlu(olc, sakal_renk):
