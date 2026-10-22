@@ -93,3 +93,29 @@ Uygulama: `ben_konumlari` ozel alanından yeri ve tarafı belli benleri ayıklar
 alın, çene, dudak üstü, burun tarafsız olabilir), Aşama 1 prompt'undan çıkarır; `ben_noktasi` noktayı 5 yüz
 noktasından hesaplar, her varyasyona fırça 9 + ağırlık 1.35 ile çizilir. Kapatmak için `FOTOROBOT_AUTO_MOLE=0`.
 Yara izi otomatiğe alınmadı: Aşama 3'te güvenilir değil (1b). Sınır: Aşama 2 tüm yüzü yeniden çizerse ben kaybolabilir.
+
+# Otonom Ar-Ge (2026-10-21/22, dal `arge`)
+
+Ölçüm: yerel RTX 3050 6 GB. `deneyler/benchmark_and_test.py` (temel), `deneyler/uctan_uca.py` (arayüzün kendi akışı,
+kural tabanlı analiz). İfade uyumu Gemini ile denetlenir (`deneyler/vlm.py`: iddia doğru mu + gerçekçilik 1-5),
+kimlik ArcFace. Senaryolar: siyah saç + beyaz sakal (55), kısa sarı saç (35), sol yanakta yara izi (40),
+kel + beyaz pala bıyık (60); Aşama 2: temel yüz + 5 komut.
+
+| Senaryo | Temel | Yeni | Yöntem |
+|---|---|---|---|
+| A1 siyah saç + beyaz sakal | 0/4 | 3/4 (r 3-4) | rötuş: SegFormer ayrıştırma + Lab boyama + inpaint 0.6 |
+| A1 kısa sarı saç | 0/4 | 4/4 (r 2-4) | rötuş: saç boyama + inpaint 0.45 |
+| A1 sol yanakta yara izi | 0/4 (turuncu leke) | 3/4 (r 4) | prompt'tan çıkar, yüz noktalarından prosedürel iz + inpaint 0.3 |
+| A1 beyaz pala bıyık | 0/4 (ayrıca analizci rengi düşürüyordu) | 3/4 (r 2-4) | analizci düzeltmesi + yalnız bıyık maskesi |
+| A2 saçları sarı yap | 0/3 | 3/3, kimlik 0.83 | bölgesel FaceID + rötuş |
+| A2 yara izi ekle | 0/3 | 3/3, kimlik 0.99 | yüz yeniden üretilmez, iz çizilir |
+| A2 beyaz sakal ekle | 0/3 (kirli sakal) | 3/3, kimlik 0.66-0.71 | FaceID'siz alt yüz çizimi (güç 0.95) |
+| A2 15 yaş yaşlandır | 0/3 | 3/3, kimlik 0.71-0.73 (r 4) | FaceID'siz alın/göz/ağız kenarı çizimi (güç 0.55) |
+| A2 burnu kemerli yap | 0/3 (analizci komutu anlamıyordu) | 0/3 | açık: önden vesikalıkta kemer görünmüyor |
+
+Reddedilenler (ölçümle):
+- FLUX.1-dev NF4 (Colab T4): görsel başına ~9 dk (T4'te bf16 yok), siyah saç + beyaz sakal 0/4. Ücretsiz T4'te uygulanamaz.
+- Aşama 2'de değişen alana ağırlık / düşük kimlik gücü / yüksek değişim: burun ve yaşta 0/3 (FaceID geri çekiyor).
+- Tam yüz FaceID'siz img2img ile yaşlandırma: 3/3 ama kimlik 0.37-0.43 (başka kişi).
+- Sakal için "snow white": tıraş köpüğü; ağırlık 1.3 + "thick": örgülü/kostüm sakal (r 2).
+- Rötuşta tam Lab uzaklığı (ΔE>15): model beyazı kır çizince yeniden boyuyordu → renk ailesi kontrolü (`renk_uyumlu`).
