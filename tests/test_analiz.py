@@ -558,6 +558,7 @@ def test_yerel_burun():
     from fotorobot.ozellikler import yerel_cizimler
 
     oz = normalize({"cinsiyet": "male"})
-    cizimler, alanlar = yerel_cizimler(oz, dict(oz, burun="aquiline hooked nose"))
+    assert yerel_cizimler(oz, dict(oz, burun="aquiline hooked nose")) == ([], set())
+    cizimler, alanlar = yerel_cizimler(oz, dict(oz, burun="aquiline hooked nose"), burun=True)
     assert alanlar == {"burun"} and cizimler[0]["bolgeler"] == ["burun_genis"]
     assert "bump on the nose bridge" in cizimler[0]["pozitif"]

@@ -73,6 +73,8 @@ class Ayarlar:
     otomatik_rotus: bool = _env_bool("FOTOROBOT_AUTO_RETOUCH", True)
     # Aşama 2'de sakal ekleme ve yaşlandırmayı FaceID'siz, yalnızca ilgili yüz bölgesine çiz
     yerel_cizim: bool = _env_bool("FOTOROBOT_LOCAL_EDIT", True)
+    # Burun için de yerel çizim (deneysel: uçtan uca testte kazanç yok, kimlik düşüyor)
+    yerel_burun: bool = _env_bool("FOTOROBOT_LOCAL_NOSE", False)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

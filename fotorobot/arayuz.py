@@ -368,7 +368,7 @@ class Uygulama:
             uretim_kaynak = dict(kaynak_oz, ozel=kalan_eski)
             uretim_kimlik = dict(kimlik_oz, ozel=yara_konumlari(kimlik_oz.get("ozel"))[0])
         # Sakal ekleme ve yaşlandırma FaceID'siz yerel çizimle yapılır; kalan değişiklikler FaceID'li yolla
-        yereller, yerel_alanlar = yerel_cizimler(uretim_kaynak, uretim_yeni) \
+        yereller, yerel_alanlar = yerel_cizimler(uretim_kaynak, uretim_yeni, burun=self.ayarlar.yerel_burun) \
             if self.ayarlar.yerel_cizim else ([], set())
         uretim_kalan = dict(uretim_yeni, **{a: uretim_kaynak[a] for a in yerel_alanlar})
         pozitif, negatif = prompt_olustur(uretim_kalan, onceki=uretim_kaynak, referans=uretim_kimlik)

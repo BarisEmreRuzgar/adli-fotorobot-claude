@@ -289,7 +289,9 @@ SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawin
                   "costume, fake beard, viking, wizard, shaving foam, cotton")
 YAS_NEGATIFI = "worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, makeup"
 # Burun: FaceID'li bölgesel düzenleme burnu hiç değiştirmiyordu (0/3, piksel farkı ~0). FaceID'siz, burun
-# kökünü de kapsayan maskeyle tam güçte 2/3; kemer önden ancak ışık alan bir çıkıntı olarak görünür.
+# kökünü de kapsayan maskeyle tam güçte deney ızgarasında 2/3, ama uçtan uca testte 0/3 ve kimlik
+# 0.92 → 0.60-0.66 (burun değişiyor, "kemerli" görünmüyor; önden kemer seçilmiyor). Kazanç olmadığı için
+# varsayılan olarak kapalı (FOTOROBOT_LOCAL_NOSE=1 ile açılır).
 BURUN_GUCU = 1.0
 BURUN_KOYULASMA_SINIRI = 12.0
 BURUN_IPUCLARI = {
@@ -303,7 +305,7 @@ BURUN_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawin
                   "makeup, dirt, mud, wound, blood, bruise, dark stain")
 
 
-def yerel_cizimler(onceki, yeni):
+def yerel_cizimler(onceki, yeni, burun=False):
     """FaceID'siz bölgesel çizimle yapılacak değişiklikler.
 
     Dönüş: ([{"ad", "bolgeler", "pozitif", "negatif", "guc", "cfg"}, ...], ele alınan alanlar).
@@ -330,7 +332,7 @@ def yerel_cizimler(onceki, yeni):
             "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0,
         })
         alanlar.add("yas")
-    if yeni.get("burun") and yeni.get("burun") != onceki.get("burun"):
+    if burun and yeni.get("burun") and yeni.get("burun") != onceki.get("burun"):
         b = yeni["burun"].lower()
         ipucu = next((v for k, v in BURUN_IPUCLARI.items() if any(x in b for x in k)), "")
         tarif = yeni["burun"] + (", " + ipucu if ipucu else "")
