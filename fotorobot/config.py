@@ -71,6 +71,8 @@ class Ayarlar:
     otomatik_ben: bool = _env_bool("FOTOROBOT_AUTO_MOLE", True)
     # Prompt'un tutturamadığı saç/sakal rengini ve yeri belli yara izlerini piksel düzeyinde işle
     otomatik_rotus: bool = _env_bool("FOTOROBOT_AUTO_RETOUCH", True)
+    # Aşama 2'de sakal ekleme ve yaşlandırmayı FaceID'siz, yalnızca ilgili yüz bölgesine çiz
+    yerel_cizim: bool = _env_bool("FOTOROBOT_LOCAL_EDIT", True)
     # None: GPU belleğine göre otomatik karar verilir.
     dusuk_vram: object = None
     paylas: bool = _env_bool("FOTOROBOT_SHARE", colab_mi())

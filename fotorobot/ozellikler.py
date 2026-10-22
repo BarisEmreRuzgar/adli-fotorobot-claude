@@ -277,6 +277,49 @@ def degisiklik_bolgeleri(onceki, yeni):
     return bolgeler or None
 
 
+# Aşama 2'de FaceID kaynak yüzü geri çektiği için sakal ekleme (0/3, kirli sakal) ve yaşlandırma
+# (0/3) uygulanmıyordu. Bu değişiklikler FaceID kapalıyken yalnızca ilgili yüz bölgesine çizilir;
+# maskenin dışı birebir korunduğu için kimlik bölge dışından gelir (yerel test 2026-10-22:
+# sakal 3/3, yaş 3/3, gerçekçilik 4/5).
+SAKAL_EKLEME_GUCU = 0.95
+YAS_GUCU = 0.55
+YAS_ESIGI = 8  # bu kadar ve daha fazla yaşlandırmada yerel yaş çizimi
+SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
+                  "clean shaven, smooth chin, woman, braid, braided beard, handlebar mustache, curled mustache, "
+                  "costume, fake beard, viking, wizard, shaving foam, cotton")
+YAS_NEGATIFI = "worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, makeup"
+
+
+def yerel_cizimler(onceki, yeni):
+    """FaceID'siz bölgesel çizimle yapılacak değişiklikler.
+
+    Dönüş: ([{"ad", "bolgeler", "pozitif", "negatif", "guc", "cfg"}, ...], ele alınan alanlar).
+    """
+    cizimler, alanlar = [], set()
+    erkek = yeni.get("cinsiyet") != "female"
+    if erkek and not _sakal_var_mi(onceki.get("sakal")) and _sakal_var_mi(yeni.get("sakal")):
+        s = yeni["sakal"].lower()
+        yalniz_biyik = ("mustache" in s or "moustache" in s) and not any(
+            k in s for k in ("beard", "goatee", "stubble"))
+        cizimler.append({
+            "ad": "bıyık" if yalniz_biyik else "sakal",
+            "bolgeler": ["biyik"] if yalniz_biyik else ["alt_yuz"],
+            "pozitif": f"{agirlikli(yeni['sakal'] + ', natural facial hair', 1.1)}, photo, realistic",
+            "negatif": SAKAL_NEGATIFI, "guc": SAKAL_EKLEME_GUCU, "cfg": 6.5,
+        })
+        alanlar.add("sakal")
+    if int(yeni.get("yas", 0)) >= int(onceki.get("yas", 0)) + YAS_ESIGI:
+        tarif = (f"{_kisi_ifadesi(yeni)}, deep forehead wrinkles, crow's feet, under-eye bags, "
+                 "nasolabial folds, aged skin")
+        cizimler.append({
+            "ad": "yaşlanma", "bolgeler": ["yas"],
+            "pozitif": f"{agirlikli(tarif, 1.2)}, photo, realistic, natural skin texture",
+            "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0,
+        })
+        alanlar.add("yas")
+    return cizimler, alanlar
+
+
 def prompt_olustur(oz, onceki=None, referans=None):
     """Özelliklerden (pozitif, negatif) prompt çifti üretir.
 

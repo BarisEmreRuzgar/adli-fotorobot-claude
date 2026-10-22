@@ -531,3 +531,24 @@ def test_biyik_rengi_ve_belirtme_hali():
     oz = normalize({"cinsiyet": "male"})
     assert degisiklik_uygula(oz, "burnunu kemerli yap")[0]["burun"] == "aquiline hooked nose"
     assert degisiklik_uygula(oz, "çenesini sivri yap")[0]["cene"] == "pointed chin"
+
+
+def test_yerel_cizimler():
+    from fotorobot.ozellikler import yerel_cizimler
+
+    oz = normalize({"cinsiyet": "male", "yas": 35, "sakal": "clean shaven"})
+    cizimler, alanlar = yerel_cizimler(oz, dict(oz, sakal="white full beard", yas=50))
+    assert [c["bolgeler"] for c in cizimler] == [["alt_yuz"], ["yas"]] and alanlar == {"sakal", "yas"}
+    assert yerel_cizimler(oz, dict(oz, sakal="thin mustache"))[0][0]["bolgeler"] == ["biyik"]
+    # Az yaşlandırma, sakal kaldırma ve kadın yüz yerel çizime girmez
+    assert yerel_cizimler(oz, dict(oz, yas=40)) == ([], set())
+    sakalli = dict(oz, sakal="full beard")
+    assert yerel_cizimler(sakalli, dict(sakalli, sakal="clean shaven")) == ([], set())
+
+
+def test_renk_uyumlu():
+    from fotorobot.rotus import renk_uyumlu
+
+    assert renk_uyumlu((62, 0, 4), "white")  # doğal kır sakal beyaz sayılır
+    assert not renk_uyumlu((30, 4, 8), "white")
+    assert renk_uyumlu((60, 5, 20), "blonde") and not renk_uyumlu((60, 0, 3), "blonde")

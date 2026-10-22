@@ -253,6 +253,22 @@ def renk_farki(olculen, renk):
     return float(np.linalg.norm(np.asarray(olculen) - np.asarray(RENKLER[renk])))
 
 
+def renk_uyumlu(olculen, renk):
+    """Ölçülen renk istenen renk ailesinde mi? Tam Lab uzaklığı fazla katıydı: model beyaz sakalı
+    doğal kır (L*~60) çizdiğinde yeniden boyanıyor ve gerçekçilik bozuluyordu (Aşama 2 sakal testi)."""
+    L, a, b = (float(x) for x in olculen)
+    kroma = float(np.hypot(a, b))
+    if renk in ("white", "silver", "grey", "gray"):
+        return kroma < 14 and L >= RENKLER[renk][0] - 22
+    if renk in ("blonde", "golden", "platinum blonde"):
+        return L >= 50 and b >= 12
+    if renk in ("black", "jet black"):
+        return L <= 25
+    if renk == "salt and pepper":
+        return kroma < 14 and 35 <= L <= 70
+    return renk_farki(olculen, renk) <= RENK_ESIGI
+
+
 # ── Yara izi ─────────────────────────────────────────────────────────
 
 YARA_YERLERI = (  # (anahtar sözcükler, yer); özelden genele

@@ -12,7 +12,7 @@ from .motor import ben_noktasi
 from .rotus import yara_konumlari
 from .ozellikler import (
     ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, ben_konumlari, bolge_promptu, degisiklik_bolgeleri,
-    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler,
+    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler, yerel_cizimler,
 )
 
 ORNEK_IFADELER = [
@@ -367,9 +367,13 @@ class Uygulama:
             uretim_yeni = dict(yeni_oz, ozel=kalan_yeni)
             uretim_kaynak = dict(kaynak_oz, ozel=kalan_eski)
             uretim_kimlik = dict(kimlik_oz, ozel=yara_konumlari(kimlik_oz.get("ozel"))[0])
-        pozitif, negatif = prompt_olustur(uretim_yeni, onceki=uretim_kaynak, referans=uretim_kimlik)
-        bolgeler = degisiklik_bolgeleri(uretim_kaynak, uretim_yeni) if self.ayarlar.bolgesel_duzenleme else None
-        yalniz_iz = uretim_yeni == uretim_kaynak and bool(yeni_yaralar)
+        # Sakal ekleme ve yaşlandırma FaceID'siz yerel çizimle yapılır; kalan değişiklikler FaceID'li yolla
+        yereller, yerel_alanlar = yerel_cizimler(uretim_kaynak, uretim_yeni) \
+            if self.ayarlar.yerel_cizim else ([], set())
+        uretim_kalan = dict(uretim_yeni, **{a: uretim_kaynak[a] for a in yerel_alanlar})
+        pozitif, negatif = prompt_olustur(uretim_kalan, onceki=uretim_kaynak, referans=uretim_kimlik)
+        bolgeler = degisiklik_bolgeleri(uretim_kaynak, uretim_kalan) if self.ayarlar.bolgesel_duzenleme else None
+        yalniz_yerel = uretim_kalan == uretim_kaynak and bool(yeni_yaralar or yereller)
         sac_maskele = yeni_oz["sac"] != kimlik_oz.get("sac")
         if sac_maskele:
             rapor.append("ℹ️ Saç değiştiği için kimlik kırpıntısında saç bölgesi maskelendi.")
@@ -383,9 +387,9 @@ class Uygulama:
         vaka_id = vaka_id or yeni_vaka_id()
         kayit = self._kayit(vaka_id)
         try:
-            if yalniz_iz:
-                # Yalnızca yara izi ekleniyor: yüz yeniden üretilmez, iz kaynağın üzerine çizilir
-                rapor.append("ℹ️ Yalnızca yara izi eklendiği için yüz yeniden üretilmedi.")
+            if yalniz_yerel:
+                # Yalnızca yerel değişiklik (yara izi, sakal, yaşlanma): yüzün geri kalanı yeniden üretilmez
+                rapor.append("ℹ️ Yalnızca yerel değişiklik olduğu için yüzün geri kalanı yeniden üretilmedi.")
                 sonuclar = [(kaynak_pil.convert("RGB"), t, None)
                             for t in self.motor._tohumlar(int(tohum), int(adet))]
             else:
@@ -395,9 +399,18 @@ class Uygulama:
                     kimlik_gorseli=gorsel_ac(kimlik_ref), sac_maskele=sac_maskele, bolgeler=bolgeler,
                     ilerleme=lambda o, m: progress(o, desc=m),
                 )
+            kimlik_yuzu = self.motor.yuz_bul(gorsel_ac(kimlik_ref) or kaynak_pil)
+            for y in yereller:
+                for i, (gorsel, t, _) in enumerate(sonuclar):
+                    progress(i / len(sonuclar), desc=f"Yerel çizim: {y['ad']} ({i + 1}/{len(sonuclar)})")
+                    yeni = self.motor.yerel_ciz(gorsel, y["bolgeler"], y["pozitif"], y["negatif"], adet=1,
+                                                tohum=t, adim=int(adim), cfg=y["cfg"], guc=y["guc"])[0][0]
+                    sonuclar[i] = (yeni, t, self.motor.kimlik_benzerligi(None, yeni, yuz_a=kimlik_yuzu)
+                                   if kimlik_yuzu is not None else None)
+            if yereller:
+                rapor.append("🖌️ FaceID'siz yerel çizim: " + ", ".join(y["ad"] for y in yereller))
             rotuslar = []
             if self.ayarlar.otomatik_rotus:
-                kimlik_yuzu = self.motor.yuz_bul(gorsel_ac(kimlik_ref) or kaynak_pil)
                 rotuslar = self._rotus(sonuclar, yeni_oz, yeni_yaralar, int(adim), progress,
                                        benzerlik_kaynagi=kimlik_yuzu)
                 rapor += _rotus_raporu(rotuslar)

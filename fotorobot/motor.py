@@ -73,7 +73,8 @@ def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
     kutusundan istenen bölgelerin birleşik maskesini çizer (ek model gerektirmez).
 
     Bölgeler: goz (kaşlar + gözler + gözlük), burun, agiz, alt_yuz (bıyık + sakal +
-    çene), kulak, sac (yüz ovalinin dışı).
+    çene), biyik (üst dudak), kulak, sac (yüz ovalinin dışı), yas (yaşlanmanın görüldüğü
+    alın, göz çevresi ve ağız kenarı çizgileri).
     """
     from PIL import ImageDraw
 
@@ -93,6 +94,17 @@ def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
             ciz.ellipse((mlx - 0.3 * d, my - 0.4 * d, mrx + 0.3 * d, my + 0.4 * d), fill=255)
         elif b == "alt_yuz":
             ciz.ellipse((x0 - 0.05 * w, ny - 0.15 * d, x1 + 0.05 * w, y1 + 0.15 * h), fill=255)
+        elif b == "biyik":
+            ciz.polygon([(mlx - 0.35 * d, ny + 0.02 * d), (mrx + 0.35 * d, ny + 0.02 * d),
+                         (mrx + 0.45 * d, my + 0.35 * d), (mlx - 0.45 * d, my + 0.35 * d)], fill=255)
+        elif b == "yas":
+            ciz.rectangle((lx - 0.45 * d, gy - 1.25 * d, rx + 0.45 * d, gy - 0.55 * d), fill=255)
+            for gx, yon in ((lx, -1), (rx, 1)):
+                ciz.ellipse((gx - 0.45 * d + yon * 0.15 * d, gy - 0.2 * d, gx + 0.45 * d + yon * 0.15 * d,
+                             gy + 0.45 * d), fill=255)
+            for ax, ay, yon in ((mlx, mly, -1), (mrx, mry, 1)):
+                ciz.ellipse((ax + yon * 0.25 * d - 0.2 * d, ny - 0.1 * d, ax + yon * 0.25 * d + 0.2 * d,
+                             ay + 0.3 * d), fill=255)
         elif b == "kulak":
             ciz.rectangle((x0 - 0.35 * w, gy - 0.1 * h, x0 + 0.08 * w, my + 0.15 * h), fill=255)
             ciz.rectangle((x1 - 0.08 * w, gy - 0.1 * h, x1 + 0.35 * w, my + 0.15 * h), fill=255)
@@ -582,6 +594,18 @@ class Motor:
         self._bellek_temizle()
         return sonuclar
 
+    def yerel_ciz(self, kaynak, bolgeler, pozitif, negatif, adet=1, tohum=-1, adim=25, cfg=6.5, guc=0.95,
+                  ilerleme=None):
+        """FaceID kapalıyken yalnızca verilen yüz bölgelerini (yuz_bolge_maskesi) yeniden çizer.
+        FaceID kaynağın sakalsız/genç yüzünü geri çektiği için sakal ekleme ve yaşlandırma böyle yapılır."""
+        kaynak = kaynak.convert("RGB")
+        yuz = self.yuz_bul(kaynak)
+        if yuz is None:
+            raise ValueError("Yüz bulunamadı; bölgesel çizim yapılamadı.")
+        maske = yuz_bolge_maskesi(yuz.kps, yuz.bbox, kaynak.size, bolgeler)
+        return self.bolge_duzenle(kaynak, maske, pozitif, negatif, adet=adet, tohum=tohum, adim=adim, cfg=cfg,
+                                  guc=guc, ilerleme=ilerleme)
+
     # ── Rötuş ──────────────────────────────────────────────────────────
 
     def _incelt(self, gorsel, maske, pozitif, guc, tohum, adim, ek_negatif=""):
@@ -615,7 +639,7 @@ class Motor:
             sac_renk = rotus.renk_bul(oz.get("sac"))
             if sac_renk and "bald" not in (oz.get("sac") or ""):
                 olc = rotus.sac_rengi_olc(gorsel, harita)
-                if olc is not None and rotus.renk_farki(olc, sac_renk) > rotus.RENK_ESIGI:
+                if olc is not None and not rotus.renk_uyumlu(olc, sac_renk):
                     boyali, maske = rotus.sac_boya(gorsel, harita, sac_renk)
                     if boyali is not None:
                         gorsel = self._incelt(boyali, maske, f"{agirlikli(sac_renk + ' hair', 1.2)}, "
@@ -627,7 +651,7 @@ class Motor:
             if sakal_renk and oz.get("cinsiyet") != "female":
                 biyik = rotus.yalniz_biyik_mi(sakal)
                 olc = rotus.sakal_rengi_olc(gorsel, yuz.kps, harita, biyik)
-                if olc is not None and rotus.renk_farki(olc, sakal_renk) > rotus.RENK_ESIGI:
+                if olc is not None and not rotus.renk_uyumlu(olc, sakal_renk):
                     boyali, maske = rotus.sakal_boya(gorsel, yuz.kps, harita, sakal_renk, biyik)
                     if boyali is not None:
                         acik = sakal_renk in ("white", "silver", "grey", "gray", "salt and pepper")
