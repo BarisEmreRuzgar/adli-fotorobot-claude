@@ -4,6 +4,7 @@ SD 1.5'in CLIP kodlayıcısı sıfatları karıştırıyor ("siyah saç + beyaz 
 FLUX'un T5 kodlayıcısı uzun doğal dil cümlelerini anlıyor; renk/iz ayrımını tutturuyor mu?
 Colab T4'te: python deneyler/flux_test.py [ad]
 """
+import gc
 import json
 import os
 import sys
@@ -62,18 +63,31 @@ def main(ad="flux"):
     os.makedirs(cikti, exist_ok=True)
     dtype = torch.bfloat16 if os.environ.get("FLUX_DTYPE", "bf16") == "bf16" else torch.float16
     t0 = time.time()
+    # Colab'ın 12 GB RAM'inde CPU offload dönüştürücü + T5'i (~13 GB) aynı anda RAM'de tutmaya
+    # çalışıp süreci öldürüyordu. Bunun yerine her şey GPU'da: önce tüm prompt'lar T5 ile
+    # kodlanır, sonra T5 silinir ve üretim yalnızca dönüştürücüyle yapılır.
     pipe = FluxPipeline.from_pretrained(FLUX_MODELI, torch_dtype=dtype)
-    pipe.enable_model_cpu_offload()
+    pipe.to("cuda")
     print(f"SONUC yuklendi {time.time() - t0:.0f} sn", flush=True)
+    promptlar = {a: flux_promptu(oz_cikar(i)) for a, i in SENARYOLAR.items()}
+    gomuler = {}
+    with torch.no_grad():
+        for anahtar, prompt in promptlar.items():
+            print("PROMPT", anahtar, prompt, flush=True)
+            pe, ppe, _ = pipe.encode_prompt(prompt=prompt, prompt_2=None, device="cuda", max_sequence_length=256)
+            gomuler[anahtar] = (pe, ppe)
+    pipe.text_encoder_2 = None
+    pipe.text_encoder = None
+    gc.collect()
+    torch.cuda.empty_cache()
     rapor, satirlar, etiketler = {}, [], []
-    for anahtar, ifade in SENARYOLAR.items():
-        oz = oz_cikar(ifade)
-        prompt = flux_promptu(oz)
-        print("PROMPT", anahtar, prompt, flush=True)
+    for anahtar in SENARYOLAR:
+        pe, ppe = gomuler[anahtar]
         sat, et, sonuc = [], [], []
         for i in range(4):
             t0 = time.time()
-            im = pipe(prompt, width=640, height=800, guidance_scale=3.5, num_inference_steps=24,
+            im = pipe(prompt_embeds=pe, pooled_prompt_embeds=ppe, width=640, height=800, guidance_scale=3.5,
+                      num_inference_steps=24,
                       generator=torch.Generator("cpu").manual_seed(4242 + i * 1000)).images[0]
             sure = time.time() - t0
             im.save(os.path.join(cikti, f"{ad}_{anahtar}_{i}.png"))
