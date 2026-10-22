@@ -21,10 +21,10 @@ SINIF = {"background": 0, "skin": 1, "nose": 2, "eye_g": 3, "l_eye": 4, "r_eye":
 
 # Saç/sakal renk sözcükleri → hedef CIE Lab. Uzun ifadeler önce aranır.
 RENKLER = {
-    "platinum blonde": (84, 1, 14), "salt and pepper": (55, 0, 3), "jet black": (10, 0, 0),
+    "platinum blonde": (80, 1, 10), "salt and pepper": (55, 0, 3), "jet black": (10, 0, 0),
     "dark brown": (22, 5, 9), "light brown": (46, 8, 19), "chestnut brown": (32, 13, 18),
     "red ginger": (45, 28, 38), "white": (79, 0, 4), "silver": (72, 0, 2), "grey": (62, 0, 3),
-    "gray": (62, 0, 3), "greying": (55, 1, 6), "blonde": (70, 6, 32), "golden": (66, 9, 40),
+    "gray": (62, 0, 3), "greying": (55, 1, 6), "blonde": (64, 5, 24), "golden": (62, 9, 32),
     "auburn": (34, 22, 24), "ginger": (48, 26, 38), "red": (40, 30, 30), "black": (13, 1, 1),
     "brown": (30, 8, 14),
 }
@@ -128,7 +128,7 @@ def _noktalar(kps):
     return lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, max(abs(rx - lx), 1.0)
 
 
-def sakal_bolgesi(kps, boyut, harita, yalniz_biyik=False):
+def sakal_bolgesi(kps, boyut, harita, yalniz_biyik=False, siniflar=("skin", "hair")):
     """Bıyık + sakal + çene + favoriler (dudak, burun, göz hariç), yumuşak (H, W) ağırlık.
     `yalniz_biyik`: yalnızca üst dudak ve ağız kenarları (pala bıyığın uçları dahil)."""
     lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, d = _noktalar(kps)
@@ -148,7 +148,7 @@ def sakal_bolgesi(kps, boyut, harita, yalniz_biyik=False):
     # Sınır sert olursa boyanan sakal yanakta yatay bir çizgiyle kesiliyordu: yumuşak geçiş
     bolge = np.asarray(m.filter(ImageFilter.GaussianBlur(0.12 * d)), dtype=np.float64) / 255
     # Boyun (çene altı gölgesi koyu olduğu için kıl sanılıyordu) ve saç dışındaki her şey hariç
-    izinli = np.isin(harita, [SINIF["skin"], SINIF["hair"]])
+    izinli = np.isin(harita, [SINIF[k] for k in siniflar])
     return bolge * izinli
 
 
@@ -176,6 +176,9 @@ def sakal_kilini_bul(lab, kps, harita, yalniz_biyik=False):
     # Kıl, aynı ışıktaki cilde göre koyudur; 6 birimden koyular kıl sayılmaya başlar
     koyuluk = np.clip((cilt[0] - lab[..., 0] - 6) / 16, 0, 1)
     agirlik = koyuluk * bolge
+    # Ayrıştırıcı gür bıyığın bir kısmını "üst dudak" etiketliyor; dudaktan çok koyu olanlar kıldır
+    dudak = sakal_bolgesi(kps, harita.shape[::-1], harita, yalniz_biyik, siniflar=("u_lip",))
+    agirlik = np.maximum(agirlik, np.clip((cilt[0] - lab[..., 0] - 25) / 10, 0, 1) * dudak)
     if (agirlik > 0.5).sum() < 0.08 * (bolge > 0.5).sum():
         return None, cilt
     return _yumusat(agirlik, 1.2), cilt
@@ -193,8 +196,28 @@ def sac_boya(gorsel, harita, renk):
     hedef = np.array(RENKLER[renk], dtype=np.float64)
     agirlik = _yumusat(maske.astype(np.float64), 1.5) * maske.max()
     # Koyu saçı açarken dokunun kontrastı da artmasın diye korunan oran azaltılır
-    yeni = _boya(lab, agirlik, ort, hedef, doku=0.55 if hedef[0] > ort[0] + 20 else 0.8)
+    # Koyu saç açılırken doku çok azaltılınca düz "boya" gibi görünüyordu (Gemini gerçekçilik 2-3)
+    yeni = _boya(lab, agirlik, ort, hedef, doku=0.7 if hedef[0] > ort[0] + 20 else 0.85)
     return Image.fromarray(lab_rgb(yeni)), maske
+
+
+def renk_kilitle(gorsel, maske, renk, oran=0.8):
+    """İnceltme sonrası maskedeki rengi (a*, b*) hedefe geri çeker; parlaklık ve doku olduğu gibi kalır.
+    Beyaz bıyık inceltmede altın sarısına kayıyordu."""
+    lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
+    m = np.asarray(maske, dtype=np.float64)
+    m = m / 255 if m.max() > 1 else m
+    m = _yumusat(m, 1.0) * oran
+    hedef = np.array(RENKLER[renk], dtype=np.float64)
+    ort = _ortanca(lab, m > 0.3)
+    if ort is None:
+        return gorsel
+    yeni = lab.copy()
+    for k in (1, 2):
+        yeni[..., k] = hedef[k] + (lab[..., k] - ort[k]) * 0.4
+    sonuc = lab * (1 - m[..., None]) + yeni * m[..., None]
+    sonuc[..., 0] = lab[..., 0]
+    return Image.fromarray(lab_rgb(sonuc))
 
 
 def yalniz_biyik_mi(sakal):

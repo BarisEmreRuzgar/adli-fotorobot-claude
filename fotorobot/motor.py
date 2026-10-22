@@ -620,6 +620,7 @@ class Motor:
                     if boyali is not None:
                         gorsel = self._incelt(boyali, maske, f"{agirlikli(sac_renk + ' hair', 1.2)}, "
                                               "natural hair texture, photo", rotus.SAC_INCELTME, tohum, adim)
+                        gorsel = rotus.renk_kilitle(gorsel, rotus.ayristir(gorsel) == rotus.SINIF["hair"], sac_renk)
                         yapilan.append(f"saç rengi → {sac_renk}")
             sakal = oz.get("sakal") or ""
             sakal_renk = rotus.renk_bul(sakal)
@@ -633,6 +634,7 @@ class Motor:
                         gorsel = self._incelt(boyali, maske, f"{agirlikli(sakal, 1.15)}, natural facial hair "
                                               "strands, photo", rotus.SAKAL_INCELTME, tohum, adim,
                                               rotus.ACIK_RENK_NEGATIFI if acik else "")
+                        gorsel = rotus.renk_kilitle(gorsel, maske, sakal_renk)
                         yapilan.append(f"{'bıyık' if biyik else 'sakal'} rengi → {sakal_renk}")
         for i, (yer, taraf) in enumerate(yaralar):
             yol = rotus.yara_yolu(yuz.kps, yer, taraf)
