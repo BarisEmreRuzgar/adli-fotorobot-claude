@@ -90,6 +90,9 @@ def yuz_bolge_maskesi(kps, bbox, boyut, bolgeler):
             ciz.rectangle((min(lx, rx) - 0.75 * d, gy - 0.6 * d, max(lx, rx) + 0.75 * d, gy + 0.45 * d), fill=255)
         elif b == "burun":
             ciz.ellipse((nx - 0.45 * d, gy + 0.05 * d, nx + 0.45 * d, ny + 0.35 * d), fill=255)
+        elif b == "burun_genis":
+            # Burun kökü (gözlerin arası) dahil: kemer/çıkıntı burun sırtının üst yarısında görünür
+            ciz.ellipse((nx - 0.5 * d, gy - 0.25 * d, nx + 0.5 * d, ny + 0.4 * d), fill=255)
         elif b == "agiz":
             ciz.ellipse((mlx - 0.3 * d, my - 0.4 * d, mrx + 0.3 * d, my + 0.4 * d), fill=255)
         elif b == "alt_yuz":
@@ -595,16 +598,40 @@ class Motor:
         return sonuclar
 
     def yerel_ciz(self, kaynak, bolgeler, pozitif, negatif, adet=1, tohum=-1, adim=25, cfg=6.5, guc=0.95,
-                  ilerleme=None):
+                  en_cok_koyulasma=None, deneme=3, ilerleme=None):
         """FaceID kapalıyken yalnızca verilen yüz bölgelerini (yuz_bolge_maskesi) yeniden çizer.
-        FaceID kaynağın sakalsız/genç yüzünü geri çektiği için sakal ekleme ve yaşlandırma böyle yapılır."""
+        FaceID kaynağın sakalsız/genç yüzünü ve burnunu geri çektiği için sakal ekleme, yaşlandırma ve
+        burun böyle yapılır.
+
+        `en_cok_koyulasma`: bölgenin ortalama parlaklığı (L*) bundan fazla düşerse sonuç bozuk sayılır
+        (burunda 9 denemenin 2'sinde kahverengi leke çıktı) ve başka tohumla `deneme` kez yeniden çizilir;
+        hiçbiri geçmezse en az koyulaşan seçilir.
+        """
+        from . import rotus
+
         kaynak = kaynak.convert("RGB")
         yuz = self.yuz_bul(kaynak)
         if yuz is None:
             raise ValueError("Yüz bulunamadı; bölgesel çizim yapılamadı.")
         maske = yuz_bolge_maskesi(yuz.kps, yuz.bbox, kaynak.size, bolgeler)
-        return self.bolge_duzenle(kaynak, maske, pozitif, negatif, adet=adet, tohum=tohum, adim=adim, cfg=cfg,
-                                  guc=guc, ilerleme=ilerleme)
+        if en_cok_koyulasma is None:
+            return self.bolge_duzenle(kaynak, maske, pozitif, negatif, adet=adet, tohum=tohum, adim=adim,
+                                      cfg=cfg, guc=guc, ilerleme=ilerleme)
+        m = np.asarray(maske) > 127
+        once = rotus.rgb_lab(np.asarray(kaynak))[m][:, 0].mean()
+        sonuclar = []
+        for t in self._tohumlar(tohum, adet):
+            aday = None
+            for k in range(max(1, int(deneme))):
+                im, t2, b = self.bolge_duzenle(kaynak, maske, pozitif, negatif, adet=1, tohum=t + k * 7919,
+                                               adim=adim, cfg=cfg, guc=guc)[0]
+                koyulasma = once - rotus.rgb_lab(np.asarray(im))[m][:, 0].mean()
+                if aday is None or koyulasma < aday[0]:
+                    aday = (koyulasma, (im, t, b))
+                if koyulasma <= en_cok_koyulasma:
+                    break
+            sonuclar.append(aday[1])
+        return sonuclar
 
     # ── Rötuş ──────────────────────────────────────────────────────────
 

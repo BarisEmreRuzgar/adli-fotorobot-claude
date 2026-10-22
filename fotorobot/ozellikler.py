@@ -288,6 +288,19 @@ SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawin
                   "clean shaven, smooth chin, woman, braid, braided beard, handlebar mustache, curled mustache, "
                   "costume, fake beard, viking, wizard, shaving foam, cotton")
 YAS_NEGATIFI = "worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, makeup"
+# Burun: FaceID'li bölgesel düzenleme burnu hiç değiştirmiyordu (0/3, piksel farkı ~0). FaceID'siz, burun
+# kökünü de kapsayan maskeyle tam güçte 2/3; kemer önden ancak ışık alan bir çıkıntı olarak görünür.
+BURUN_GUCU = 1.0
+BURUN_KOYULASMA_SINIRI = 12.0
+BURUN_IPUCLARI = {
+    ("aquiline", "hooked", "roman"): "prominent bony bump on the nose bridge catching the light, "
+                                     "long nose with a downward pointing tip",
+    ("crooked", "broken"): "nose bridge bent to one side, asymmetric nose",
+    ("bulbous",): "large rounded bulbous nose tip",
+    ("upturned",): "upturned nose tip, visible nostrils",
+}
+BURUN_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
+                  "makeup, dirt, mud, wound, blood, bruise, dark stain")
 
 
 def yerel_cizimler(onceki, yeni):
@@ -317,6 +330,17 @@ def yerel_cizimler(onceki, yeni):
             "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0,
         })
         alanlar.add("yas")
+    if yeni.get("burun") and yeni.get("burun") != onceki.get("burun"):
+        b = yeni["burun"].lower()
+        ipucu = next((v for k, v in BURUN_IPUCLARI.items() if any(x in b for x in k)), "")
+        tarif = yeni["burun"] + (", " + ipucu if ipucu else "")
+        cizimler.append({
+            "ad": "burun", "bolgeler": ["burun_genis"],
+            "pozitif": f"{agirlikli(tarif, 1.3)}, photo, realistic, natural skin texture",
+            "negatif": BURUN_NEGATIFI, "guc": BURUN_GUCU, "cfg": 8.0,
+            "en_cok_koyulasma": BURUN_KOYULASMA_SINIRI,
+        })
+        alanlar.add("burun")
     return cizimler, alanlar
 
 

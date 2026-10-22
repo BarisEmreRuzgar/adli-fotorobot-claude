@@ -552,3 +552,12 @@ def test_renk_uyumlu():
     assert renk_uyumlu((62, 0, 4), "white")  # doğal kır sakal beyaz sayılır
     assert not renk_uyumlu((30, 4, 8), "white")
     assert renk_uyumlu((60, 5, 20), "blonde") and not renk_uyumlu((60, 0, 3), "blonde")
+
+
+def test_yerel_burun():
+    from fotorobot.ozellikler import yerel_cizimler
+
+    oz = normalize({"cinsiyet": "male"})
+    cizimler, alanlar = yerel_cizimler(oz, dict(oz, burun="aquiline hooked nose"))
+    assert alanlar == {"burun"} and cizimler[0]["bolgeler"] == ["burun_genis"]
+    assert "bump on the nose bridge" in cizimler[0]["pozitif"]
