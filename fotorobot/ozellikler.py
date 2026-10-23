@@ -137,8 +137,10 @@ def normalize(ham, temel=None):
     return sonuc
 
 
-def _kivircik_mi(sac):
-    return "curl" in (sac or "").lower()
+def _sac_ipuclari(sac):
+    """Saç tarifine uyan (ipucu, negatif) çiftleri; "shoulder length" uzun sayılmaz."""
+    s = (sac or "").lower()
+    return [v for k, v in SAC_IPUCLARI.items() if k in s and not (k == "long" and "shoulder" in s)]
 
 
 def _yalniz_kirli_sakal_mi(sakal):
@@ -148,10 +150,14 @@ def _yalniz_kirli_sakal_mi(sakal):
 
 # "Kirli sakal" isteğinde model keçi sakalı + dolgun bıyık çiziyordu (gerileme testi, esmer senaryosu)
 KIRLI_SAKAL_IPUCU = "visible dark short stubble evenly covering cheeks, jaw and upper lip, unshaven"
-# "kısa kıvırcık saç" bazı tohumlarda düz çıkıyordu (gerileme esmer_kivircik 1/2)
-KIVIRCIK_IPUCU = "tight natural curls, curly hair texture"
-KIVIRCIK_AGIRLIGI = 1.2
-KIVIRCIK_NEGATIFI = "straight hair, slicked back hair"
+# Saç tipinin/uzunluğunun ipucu ve negatifi (anahtar sözcük → (ipucu, negatif)); saç tarifi
+# SAC_IPUCU_AGIRLIGI ile vurgulanır. Kıvırcık bazı tohumlarda düz (gerileme esmer_kivircik 1/2),
+# uzun saç omuz hizasında çıkıyordu (kadin_sari 1/2)
+SAC_IPUCLARI = {
+    "curl": ("tight natural curls, curly hair texture", "straight hair, slicked back hair"),
+    "long": ("long hair falling past the shoulders to the chest", "short hair, bob cut, shoulder length hair"),
+}
+SAC_IPUCU_AGIRLIGI = 1.2
 KIRLI_SAKAL_NEGATIFI = "goatee, full beard, long beard, thick mustache, handlebar mustache"
 
 
@@ -430,8 +436,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
     # bastırıyordu. 1: kişi + kafa yapısı + saç, 2: yüz içi + sakal + izler/aksesuar,
     # 3: çekim koşulları.
     sac = oz["sac"]
-    if _kivircik_mi(sac):
-        sac = agirlikli(f"{sac}, {KIVIRCIK_IPUCU}", KIVIRCIK_AGIRLIGI)
+    if _sac_ipuclari(sac):
+        sac = agirlikli(", ".join([sac] + [i for i, _ in _sac_ipuclari(sac)]), SAC_IPUCU_AGIRLIGI)
     blok1 = parcalar + [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], sac]
     blok2 = []
     # Yara izi, küpe, gözlük gibi ayırt edici izler bloğun başına alınır
@@ -488,8 +494,7 @@ def prompt_olustur(oz, onceki=None, referans=None):
             negatif.append("beard, mustache, stubble, goatee")
         elif _yalniz_kirli_sakal_mi(oz["sakal"]):
             negatif.append(KIRLI_SAKAL_NEGATIFI)
-    if _kivircik_mi(oz["sac"]):
-        negatif.append(KIVIRCIK_NEGATIFI)
+    negatif += [n for _, n in _sac_ipuclari(oz["sac"])]
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
