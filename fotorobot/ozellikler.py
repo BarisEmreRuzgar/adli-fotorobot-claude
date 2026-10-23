@@ -137,6 +137,10 @@ def normalize(ham, temel=None):
     return sonuc
 
 
+def _kivircik_mi(sac):
+    return "curl" in (sac or "").lower()
+
+
 def _yalniz_kirli_sakal_mi(sakal):
     s = (sakal or "").lower()
     return "stubble" in s and not any(k in s for k in ("beard", "goatee", "mustache", "moustache"))
@@ -144,6 +148,10 @@ def _yalniz_kirli_sakal_mi(sakal):
 
 # "Kirli sakal" isteğinde model keçi sakalı + dolgun bıyık çiziyordu (gerileme testi, esmer senaryosu)
 KIRLI_SAKAL_IPUCU = "visible dark short stubble evenly covering cheeks, jaw and upper lip, unshaven"
+# "kısa kıvırcık saç" bazı tohumlarda düz çıkıyordu (gerileme esmer_kivircik 1/2)
+KIVIRCIK_IPUCU = "tight natural curls, curly hair texture"
+KIVIRCIK_AGIRLIGI = 1.2
+KIVIRCIK_NEGATIFI = "straight hair, slicked back hair"
 KIRLI_SAKAL_NEGATIFI = "goatee, full beard, long beard, thick mustache, handlebar mustache"
 
 
@@ -421,7 +429,10 @@ def prompt_olustur(oz, onceki=None, referans=None):
     # "beyaz bıyık" yan yana olunca bıyık da koyu, kısa saç ön kabulü de uzun saçı
     # bastırıyordu. 1: kişi + kafa yapısı + saç, 2: yüz içi + sakal + izler/aksesuar,
     # 3: çekim koşulları.
-    blok1 = parcalar + [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], oz["sac"]]
+    sac = oz["sac"]
+    if _kivircik_mi(sac):
+        sac = agirlikli(f"{sac}, {KIVIRCIK_IPUCU}", KIVIRCIK_AGIRLIGI)
+    blok1 = parcalar + [_yas_gorunumu(oz["yas"]), oz["ten"], oz["yuz_sekli"], sac]
     blok2 = []
     # Yara izi, küpe, gözlük gibi ayırt edici izler bloğun başına alınır
     if oz["ozel"]:
@@ -477,6 +488,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
             negatif.append("beard, mustache, stubble, goatee")
         elif _yalniz_kirli_sakal_mi(oz["sakal"]):
             negatif.append(KIRLI_SAKAL_NEGATIFI)
+    if _kivircik_mi(oz["sac"]):
+        negatif.append(KIVIRCIK_NEGATIFI)
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
