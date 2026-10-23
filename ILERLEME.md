@@ -153,3 +153,16 @@ Açık: "kirli sakal" isteğinde keçi sakalı/bıyık çıkması; kaş yarasın
 - Reddedilen (bıyık sarımsı tonu): bıyık bölgesinde yanaktan açık kıl yoksa (`biyik_acik_kil_rengi`) adaya +10 renk cezası → bıyık beyaz, kimlik 0.80-0.81 ama seçilen sakallar parlak/kostüm gibi, r2/3 (öncesi r3-4/4). Sarımsı bıyık Gemini'de geçiyor; gerçekçilik öncelikli.
 - **Kıvırcık saç** (gerileme esmer_kivircik 1/2: bir tohumda düz saç): saç tarifinde "curl" varsa 1.2 ağırlık + "tight natural curls, curly hair texture" ipucu, negatifte "straight hair, slicked back hair". Esmer senaryosu **1/2 → 2/2** (rötuş kapalı ve açık), r3-4/4.
 - **Uzun saç** (kadin_sari 1/2: saç omuz hizasında): saç ipuçları tabloya (`SAC_IPUCLARI`) taşındı; "long" → "long hair falling past the shoulders to the chest", negatif "short hair, bob cut, shoulder length hair" ("shoulder length" tarifinde uygulanmaz). kadin_sari **1/2 → 2/2**, r4/4.
+
+### Gerileme testi (2026-10-24, tohum 777, 7 senaryo × 2 görsel)
+| Senaryo | Rötuş kapalı | Rötuş açık |
+|---|---|---|
+| Kadın, uzun sarı saç | 2/2 | 2/2 |
+| Esmer, kıvırcık, kirli sakal | 2/2 | 2/2 |
+| Kızıl kadın | 1/2 | 2/2 |
+| Kır saç, gözlük, bıyık | 2/2 | 2/2 |
+| Siyah saç + beyaz sakal | 0/2 | 1/2 (görseller reg11 ile aynı, orada 2/2 → Gemini oynaklığı) |
+| Kel, beyaz pala bıyık | 0/2 | 2/2 |
+| Kaşta yara | 0/2 | 2/2 |
+| **Toplam** | **7/14** | **13/14**, gerçekçilik 3-5 |
+(2026-10-23: 4/10 → 6/10, 5 senaryo.)
