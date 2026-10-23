@@ -683,10 +683,25 @@ class Motor:
                     boyali, maske = rotus.sakal_boya(gorsel, yuz.kps, harita, sakal_renk, biyik)
                     if boyali is not None:
                         acik = sakal_renk in ("white", "silver", "grey", "gray", "salt and pepper")
-                        gorsel = self._incelt(boyali, maske, f"{agirlikli(sakal, 1.15)}, natural facial hair "
-                                              "strands, photo", rotus.SAKAL_INCELTME, tohum, adim,
-                                              rotus.ACIK_RENK_NEGATIFI if acik else "")
-                        gorsel = rotus.renk_kilitle(gorsel, maske, sakal_renk)
+                        # İnceltme bazı tohumlarda boyanan sakalı yeniden koyulaştırıyordu (beyaz → gri):
+                        # renk ailesi tutana dek başka tohumla yeniden, tutmazsa hedefe en yakını
+                        aday = None
+                        for k in range(rotus.SAKAL_INCELTME_DENEME):
+                            sonuc = self._incelt(boyali, maske, f"{agirlikli(sakal, 1.15)}, natural facial hair "
+                                                 "strands, photo", rotus.SAKAL_INCELTME, tohum + k * 7919, adim,
+                                                 ", ".join(([] if biyik else [rotus.SAKAL_INCELTME_NEGATIFI])
+                                                           + ([rotus.ACIK_RENK_NEGATIFI] if acik else [])))
+                            sonuc = rotus.renk_kilitle(sonuc, maske, sakal_renk)
+                            olc = rotus._ortanca(rotus.rgb_lab(np.asarray(sonuc)), maske)
+                            if olc is None:
+                                aday = (0.0, sonuc)
+                                break
+                            fark = rotus.renk_farki(olc, sakal_renk)
+                            if aday is None or fark < aday[0]:
+                                aday = (fark, sonuc)
+                            if rotus.renk_uyumlu(olc, sakal_renk):
+                                break
+                        gorsel = aday[1]
                         yapilan.append(f"{'bıyık' if biyik else 'sakal'} rengi → {sakal_renk}")
         for i, (yer, taraf) in enumerate(yaralar):
             yol = rotus.yara_yolu(yuz.kps, yer, taraf, harita)

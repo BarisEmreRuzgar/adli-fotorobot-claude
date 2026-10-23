@@ -27,6 +27,10 @@ SENARYOLAR = {
                     ["The person is a woman", "She has red/ginger hair"]),
     "kir_gozluk": ("50 yaşında bir erkek, kısa kır saçlı, gözlüklü, kalın bıyıklı.",
                    ["He has grey hair", "He wears glasses", "He has a thick mustache"]),
+    "beyaz_sakal": ("55 yaşlarında bir adamdı. Kısa siyah saçları vardı ama sakalı bembeyaz ve gürdü. Kalın kaşlıydı.",
+                    ["He has short black hair", "He has a full white beard"]),
+    "pala": ("60 yaşında kel bir adam, beyaz pala bıyıklı, kalın kara kaşlı.",
+             ["He is bald", "He has a thick white mustache"]),
     "kas_yara": ("30 yaşında bir erkek, kısa kahverengi saçlı, sakalsız. Sağ kaşında yara izi vardı.",
                  ["There is a visible scar through or near the person's right eyebrow (left side of the image)"]),
 }

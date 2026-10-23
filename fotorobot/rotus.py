@@ -33,9 +33,13 @@ RENK_ESIGI = 15.0
 # Boyama sonrası doğallaştırma gücü. Düşük: renk kalır ama boyalı görünür; yüksek: renk kaybolur.
 SAC_INCELTME = 0.45
 SAKAL_INCELTME = 0.6
+SAKAL_ESIK_ORANI = 0.25  # kıl eşiği: cilt ile sakalın en koyu %5i arasındaki farkın bu oranı
+SAKAL_INCELTME_DENEME = 3
 YARA_INCELTME = 0.3
 # Beyaz/gri kıl inceltmede sarı-kızıla kayıyordu (Aşama 1 testi, bıyık); bu renklerde negatife eklenir
 ACIK_RENK_NEGATIFI = "blonde, yellow, golden, ginger, orange, brown"
+# Sakal inceltmesi (güç 0.6) uçları kıvrık kostüm bıyığı uyduruyordu; Gemini "yapıştırılmış" diyordu (r2)
+SAKAL_INCELTME_NEGATIFI = "(handlebar mustache, curled mustache tips, waxed mustache:1.4), fake beard, costume, santa claus"
 INCELTME_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
                      "makeup, tattoo, ink, stripes, tape, bandage")
 
@@ -162,6 +166,21 @@ def yanak_cildi(lab, kps, harita):
     return _ortanca(lab, m & (harita == SINIF["skin"]))
 
 
+def yanak_parlaklik_haritasi(lab, kps, harita, cilt):
+    """Her yanağın kendi cilt parlaklığı (L*), aralarında yatay doğrusal geçiş. Yandan ışıkta tek
+    ortalama, gölgedeki yanağı göz altına kadar "kıl" saydırıyordu (beyaz sakal rötuşu, Gemini r2)."""
+    lx, ly, rx, ry, *_, d = _noktalar(kps)
+    h, w = harita.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    degerler = []
+    for gx, gy in ((lx, ly), (rx, ry)):
+        m = ((xx - gx) ** 2 + (yy - gy - 0.5 * d) ** 2) < (0.16 * d) ** 2
+        o = _ortanca(lab, m & (harita == SINIF["skin"]))
+        degerler.append(cilt[0] if o is None else o[0])
+    t = np.clip((xx - lx) / max(rx - lx, 1e-6), 0, 1)
+    return degerler[0] * (1 - t) + degerler[1] * t
+
+
 def sac_rengi_olc(gorsel, harita):
     lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
     return _ortanca(lab, harita == SINIF["hair"])
@@ -174,11 +193,16 @@ def sakal_kilini_bul(lab, kps, harita, yalniz_biyik=False):
     if cilt is None or (bolge > 0.5).sum() < 50:
         return None, None
     # Kıl, aynı ışıktaki cilde göre koyudur; 6 birimden koyular kıl sayılmaya başlar
-    koyuluk = np.clip((cilt[0] - lab[..., 0] - 6) / 16, 0, 1)
+    ref = yanak_parlaklik_haritasi(lab, kps, harita, cilt)
+    # Gür koyu sakalda yüz kenarına doğru koyulaşan gölgeli cilt (L* 36-50) sabit 6 birim eşikle kıl
+    # sayılıyordu; eşik, cilt ile bölgenin en koyu %5'i arasındaki farka göre büyür (kirli sakalda 6 kalır)
+    en_koyu = np.percentile(lab[..., 0][bolge > 0.5], 5)
+    esik = max(6.0, SAKAL_ESIK_ORANI * (cilt[0] - en_koyu))
+    koyuluk = np.clip((ref - lab[..., 0] - esik) / 16, 0, 1)
     agirlik = koyuluk * bolge
     # Ayrıştırıcı gür bıyığın bir kısmını "üst dudak" etiketliyor; dudaktan çok koyu olanlar kıldır
     dudak = sakal_bolgesi(kps, harita.shape[::-1], harita, yalniz_biyik, siniflar=("u_lip",))
-    agirlik = np.maximum(agirlik, np.clip((cilt[0] - lab[..., 0] - 25) / 10, 0, 1) * dudak)
+    agirlik = np.maximum(agirlik, np.clip((ref - lab[..., 0] - 25) / 10, 0, 1) * dudak)
     if (agirlik > 0.5).sum() < 0.08 * (bolge > 0.5).sum():
         return None, cilt
     return _yumusat(agirlik, 1.2), cilt
