@@ -119,3 +119,16 @@ Reddedilenler (ölçümle):
 - Tam yüz FaceID'siz img2img ile yaşlandırma: 3/3 ama kimlik 0.37-0.43 (başka kişi).
 - Sakal için "snow white": tıraş köpüğü; ağırlık 1.3 + "thick": örgülü/kostüm sakal (r 2).
 - Rötuşta tam Lab uzaklığı (ΔE>15): model beyazı kır çizince yeniden boyuyordu → renk ailesi kontrolü (`renk_uyumlu`).
+
+### Gerileme testi (2026-10-23, `deneyler/regresyon.py`, tohum 777, 2 görsel/senaryo)
+| Senaryo | Rötuş kapalı | Rötuş açık |
+|---|---|---|
+| Kadın, uzun sarı saç | 1/2 | 1/2 (saç gerçekten sarıya döndü) |
+| Esmer, kıvırcık, kirli sakal | 0/2 | 0/2 (rötuş ten/sakal tipine dokunmuyor; model kirli sakal yerine keçi sakalı çiziyor) |
+| Kızıl kadın | 1/2 | 2/2 |
+| Kır saç, gözlük, bıyık | 2/2 (saç aslında siyah, L*≈16) | 2/2 |
+| Kaşta yara izi | 0/2 | 1/2 |
+| **Toplam** | **4/10** | **6/10**, gerçekçilik 4-5 korunuyor |
+
+Düzeltme: kır saç düz gümüşe boyanınca peruk gibi duruyordu → yalnız ortancadan açık teller griye çekiliyor (karışık kır, r4/4).
+Açık: "kirli sakal" isteğinde keçi sakalı/bıyık çıkması; kaş yarasının bazen görünmemesi.
