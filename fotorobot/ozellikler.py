@@ -137,6 +137,16 @@ def normalize(ham, temel=None):
     return sonuc
 
 
+def _yalniz_kirli_sakal_mi(sakal):
+    s = (sakal or "").lower()
+    return "stubble" in s and not any(k in s for k in ("beard", "goatee", "mustache", "moustache"))
+
+
+# "Kirli sakal" isteğinde model keçi sakalı + dolgun bıyık çiziyordu (gerileme testi, esmer senaryosu)
+KIRLI_SAKAL_IPUCU = "visible dark short stubble evenly covering cheeks, jaw and upper lip, unshaven"
+KIRLI_SAKAL_NEGATIFI = "goatee, full beard, long beard, thick mustache, handlebar mustache"
+
+
 def _sakal_var_mi(sakal):
     s = (sakal or "").lower()
     if not s or "clean" in s or ("shaven" in s and "unshaven" not in s):
@@ -386,7 +396,10 @@ def prompt_olustur(oz, onceki=None, referans=None):
     if oz["aksesuar"]:
         blok2.append(_aksesuar_vurgusu(oz["aksesuar"]))
     if not kadin:
-        blok2.append(oz["sakal"] or "clean shaven")
+        if _yalniz_kirli_sakal_mi(oz["sakal"]):
+            blok2.append(agirlikli(f"{oz['sakal']}, {KIRLI_SAKAL_IPUCU}", 1.25))
+        else:
+            blok2.append(oz["sakal"] or "clean shaven")
     blok2 += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
     blok3 = []
     if not _iceriyor(oz["aksesuar"], "hoodie", "jacket", "suit", "shirt", "coat", "sweater"):
@@ -429,6 +442,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
         negatif.append("androgynous, feminine face, soft feminine features")
         if not _sakal_var_mi(oz["sakal"]):
             negatif.append("beard, mustache, stubble, goatee")
+        elif _yalniz_kirli_sakal_mi(oz["sakal"]):
+            negatif.append(KIRLI_SAKAL_NEGATIFI)
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):
         negatif.append("glasses, sunglasses")
