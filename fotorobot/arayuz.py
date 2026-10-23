@@ -403,11 +403,8 @@ class Uygulama:
             for y in yereller:
                 for i, (gorsel, t, _) in enumerate(sonuclar):
                     progress(i / len(sonuclar), desc=f"Yerel çizim: {y['ad']} ({i + 1}/{len(sonuclar)})")
-                    yeni = self.motor.yerel_ciz(gorsel, y["bolgeler"], y["pozitif"], y["negatif"], adet=1,
-                                                tohum=t, adim=int(adim), cfg=y["cfg"], guc=y["guc"],
-                                                en_cok_koyulasma=y.get("en_cok_koyulasma"))[0][0]
-                    sonuclar[i] = (yeni, t, self.motor.kimlik_benzerligi(None, yeni, yuz_a=kimlik_yuzu)
-                                   if kimlik_yuzu is not None else None)
+                    yeni, kim = self.motor.yerel_ciz_sec(gorsel, y, t, int(adim), kimlik_yuzu)
+                    sonuclar[i] = (yeni, t, kim)
             if yereller:
                 rapor.append("🖌️ FaceID'siz yerel çizim: " + ", ".join(y["ad"] for y in yereller))
             rotuslar = []

@@ -292,6 +292,9 @@ def degisiklik_bolgeleri(onceki, yeni):
 # maskenin dışı birebir korunduğu için kimlik bölge dışından gelir (yerel test 2026-10-22:
 # sakal 3/3, yaş 3/3, gerçekçilik 4/5).
 SAKAL_EKLEME_GUCU = 0.95
+# Sakal eklemede denenecek tohum sayısı (renk + kimliğe göre en iyisi seçilir; Motor.yerel_ciz_sec).
+# Yaşlandırmada kullanılmaz: kimliğe göre seçim en az yaşlananı seçiyordu (3/3 → 2/3)
+YEREL_ADAY = 3
 YAS_GUCU = 0.55
 YAS_ESIGI = 8  # bu kadar ve daha fazla yaşlandırmada yerel yaş çizimi
 SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
@@ -331,6 +334,7 @@ def yerel_cizimler(onceki, yeni, burun=False):
             "bolgeler": ["biyik"] if yalniz_biyik else ["alt_yuz"],
             "pozitif": f"{agirlikli(yeni['sakal'] + ', natural facial hair', 1.1)}, photo, realistic",
             "negatif": SAKAL_NEGATIFI, "guc": SAKAL_EKLEME_GUCU, "cfg": 6.5,
+            "aday": YEREL_ADAY, "renk": yeni["sakal"],
         })
         alanlar.add("sakal")
     if int(yeni.get("yas", 0)) >= int(onceki.get("yas", 0)) + YAS_ESIGI:
