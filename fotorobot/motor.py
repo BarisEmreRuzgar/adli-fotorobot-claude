@@ -672,7 +672,7 @@ class Motor:
         return self.bolge_duzenle(gorsel, maske, pozitif, negatif, adet=1, tohum=tohum,
                                   adim=adim, cfg=6.0, guc=guc)[0][0]
 
-    def rotus_uygula(self, gorsel, oz, tohum=0, adim=25, yaralar=(), renk=True, atla=()):
+    def rotus_uygula(self, gorsel, oz, tohum=0, adim=25, yaralar=(), renk=True, atla=(), burun_kemer=False):
         """SD 1.5'in prompt'la tutturamadığı saç/sakal rengini ve yara izlerini görüntüye işler.
 
         Renk yalnızca üretilen renk istenenden belirgin farklıysa (rotus.RENK_ESIGI) değişir.
@@ -727,6 +727,10 @@ class Motor:
                                 break
                         gorsel = aday[1]
                         yapilan.append(f"{'bıyık' if biyik else 'sakal'} rengi → {sakal_renk}")
+        if burun_kemer:
+            # Varyasyonlar aynı çıkmasın: tohuma göre 0.9x / 1x / 1.1x
+            gorsel, _ = rotus.burun_kemerli(gorsel, yuz.kps, rotus.BURUN_BUKME_GUCU * (0.9 + 0.1 * (tohum % 3)))
+            yapilan.append("kemerli burun")
         for i, (yer, taraf) in enumerate(yaralar):
             yol = rotus.yara_yolu(yuz.kps, yer, taraf, harita)
             cizili, maske = rotus.yara_ciz(gorsel, yuz.kps, yol, harita, tohum=tohum + i)

@@ -12,7 +12,7 @@ from .motor import ben_noktasi
 from .rotus import yara_konumlari
 from .ozellikler import (
     ALAN_ETIKETLERI, ALANLAR, BOLGE_ORNEKLERI, ben_konumlari, bolge_promptu, degisiklik_bolgeleri,
-    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler, yerel_cizimler,
+    normalize, ozet_metni, prompt_olustur, varsayilan_ozellikler, yerel_cizimler, kemerli_burun_mu,
 )
 
 ORNEK_IFADELER = [
@@ -259,13 +259,14 @@ class Uygulama:
             cizilen += 1
         return cizilen
 
-    def _rotus(self, sonuclar, oz, yaralar, adim, progress, benzerlik_kaynagi=None, atla=()):
+    def _rotus(self, sonuclar, oz, yaralar, adim, progress, benzerlik_kaynagi=None, atla=(), burun_kemer=False):
         """Her varyasyona rötuş uygular (sonuclar yerinde güncellenir). Dönüş: varyasyon başına yapılanlar."""
         yapilanlar = []
         for i, sonuc in enumerate(sonuclar):
             progress(i / len(sonuclar), desc=f"Renk/iz rötuşu ({i + 1}/{len(sonuclar)})")
             gorsel, t = sonuc[0], sonuc[1]
-            yeni, yapilan = self.motor.rotus_uygula(gorsel, oz, tohum=t, adim=adim, yaralar=yaralar, atla=atla)
+            yeni, yapilan = self.motor.rotus_uygula(gorsel, oz, tohum=t, adim=adim, yaralar=yaralar, atla=atla,
+                                                    burun_kemer=burun_kemer)
             if yapilan:
                 if benzerlik_kaynagi is not None:
                     sonuc = (yeni, t, self.motor.kimlik_benzerligi(None, yeni, yuz_a=benzerlik_kaynagi))
@@ -367,13 +368,18 @@ class Uygulama:
             uretim_yeni = dict(yeni_oz, ozel=kalan_yeni)
             uretim_kaynak = dict(kaynak_oz, ozel=kalan_eski)
             uretim_kimlik = dict(kimlik_oz, ozel=yara_konumlari(kimlik_oz.get("ozel"))[0])
+        # Kemerli burun: FaceID'li yol burnu değiştirmiyor, FaceID'siz yerel çizim kimliği 0.60'a düşürüyordu
+        # (0/3) → burun geometrik olarak bükülür (rötuş), yüz yeniden üretilmez
+        burun_kemer = self.ayarlar.otomatik_rotus and kemerli_burun_mu(uretim_kaynak, uretim_yeni)
+        if burun_kemer:
+            uretim_yeni = dict(uretim_yeni, burun=uretim_kaynak["burun"])
         # Sakal ekleme ve yaşlandırma FaceID'siz yerel çizimle yapılır; kalan değişiklikler FaceID'li yolla
         yereller, yerel_alanlar = yerel_cizimler(uretim_kaynak, uretim_yeni, burun=self.ayarlar.yerel_burun) \
             if self.ayarlar.yerel_cizim else ([], set())
         uretim_kalan = dict(uretim_yeni, **{a: uretim_kaynak[a] for a in yerel_alanlar})
         pozitif, negatif = prompt_olustur(uretim_kalan, onceki=uretim_kaynak, referans=uretim_kimlik)
         bolgeler = degisiklik_bolgeleri(uretim_kaynak, uretim_kalan) if self.ayarlar.bolgesel_duzenleme else None
-        yalniz_yerel = uretim_kalan == uretim_kaynak and bool(yeni_yaralar or yereller)
+        yalniz_yerel = uretim_kalan == uretim_kaynak and bool(yeni_yaralar or yereller or burun_kemer)
         sac_maskele = yeni_oz["sac"] != kimlik_oz.get("sac")
         if sac_maskele:
             rapor.append("ℹ️ Saç değiştiği için kimlik kırpıntısında saç bölgesi maskelendi.")
@@ -411,7 +417,8 @@ class Uygulama:
             if self.ayarlar.otomatik_rotus:
                 # Yerel çizimle rengi istenerek çizilen sakal yeniden boyanınca sprey boya gibi duruyordu
                 rotuslar = self._rotus(sonuclar, yeni_oz, yeni_yaralar, int(adim), progress,
-                                       benzerlik_kaynagi=kimlik_yuzu, atla=yerel_alanlar)
+                                       benzerlik_kaynagi=kimlik_yuzu, atla=yerel_alanlar,
+                                       burun_kemer=burun_kemer)
                 rapor += _rotus_raporu(rotuslar)
         except Exception as e:  # noqa: BLE001
             return [], [], "\n".join(rapor + [_hata_metni(e)]), vaka_id

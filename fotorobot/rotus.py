@@ -36,6 +36,8 @@ SAKAL_INCELTME = 0.6
 SAKAL_ESIK_ORANI = 0.25  # kıl eşiği: cilt ile sakalın en koyu %5i arasındaki farkın bu oranı
 SAKAL_INCELTME_DENEME = 3
 YARA_INCELTME = 0.3
+# Kemerli burun bükme gücü (deney bg1: 1.0 tutmadı, 1.6 OK id0.81 r4, 2.2 OK id0.77); inceltme iddiayı siliyordu
+BURUN_BUKME_GUCU = 1.8
 # Beyaz/gri kıl inceltmede sarı-kızıla kayıyordu (Aşama 1 testi, bıyık); bu renklerde negatife eklenir
 ACIK_RENK_NEGATIFI = "blonde, yellow, golden, ginger, orange, brown"
 # Sakal inceltmesi (güç 0.6) uçları kıvrık kostüm bıyığı uyduruyordu; Gemini "yapıştırılmış" diyordu (r2)
@@ -436,3 +438,41 @@ def yara_ciz(gorsel, kps, yol, harita=None, tohum=0):
         sonuc = np.where(disari[..., None], lab, sonuc)
     maske = cekirdek.filter(ImageFilter.MaxFilter(int(2 * round(0.06 * d) + 1)))
     return Image.fromarray(lab_rgb(sonuc)), maske.filter(ImageFilter.GaussianBlur(2))
+
+
+# ── Burun geometrisi ─────────────────────────────────────────────────
+
+def burun_kemerli(gorsel, kps, guc=1.0):
+    """Önden kemerli burun: burun ucu aşağı uzatılır (piksel bükme) ve burun sırtının ortasına ışık alan
+    bir çıkıntı ile altında gölge eklenir. FaceID'li çizim burnu hiç değiştirmiyor, FaceID'siz çizim
+    kimliği 0.92 → 0.60'a düşürüyordu; bükme yüzün geri kalanına dokunmaz.
+    Dönüş: (görsel, değişen bölge maskesi (L))."""
+    import cv2
+
+    lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, d = _noktalar(kps)
+    g = np.asarray(gorsel.convert("RGB"))
+    h, w = g.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    gy = (ly + ry) / 2
+    # 1) Uç aşağı: burun ucu çevresindeki içerik uca doğru azalan bir kaymayla aşağı çekilir
+    #    (ters eşleme: çıktı pikseli kaynağın daha yukarısından okunur)
+    r = 0.32 * d
+    agirlik = np.exp(-(((xx - nx) / (0.8 * r)) ** 2 + ((yy - ny) / r) ** 2))
+    dy = 0.07 * d * guc * agirlik
+    bukulmus = cv2.remap(g, xx, yy - dy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    lab = rgb_lab(bukulmus)
+    # 2) Kemer: burun sırtının göz-uç arasının ~%45'inde dar bir parlak çıkıntı, altında gölge,
+    #    iki yanında sırtın genişlediğini gösteren hafif gölge (ışık yukarıdan-önden)
+    by = gy + 0.45 * (ny - gy)
+
+    def leke(cx, cy, sx, sy):
+        return np.exp(-(((xx - cx) / sx) ** 2 + ((yy - cy) / sy) ** 2))
+
+    isik = leke(nx, by, 0.06 * d, 0.1 * d)
+    golge = leke(nx, by + 0.15 * d, 0.07 * d, 0.05 * d)
+    yan = leke(nx - 0.13 * d, by, 0.04 * d, 0.12 * d) + leke(nx + 0.13 * d, by, 0.04 * d, 0.12 * d)
+    lab[..., 0] += guc * (7 * isik - 6 * golge - 5 * yan)
+    # Işık yansıması doygun değildir; yalnız L artınca vurgu pembe/somon "makyaj" gibi duruyordu
+    lab[..., 1:] *= (1 - 0.3 * np.clip(guc * isik, 0, 1))[..., None]
+    maske = np.clip(agirlik * 1.5 + isik + golge + yan, 0, 1)
+    return Image.fromarray(lab_rgb(lab)), Image.fromarray((maske * 255).astype(np.uint8))

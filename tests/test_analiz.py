@@ -562,3 +562,23 @@ def test_yerel_burun():
     cizimler, alanlar = yerel_cizimler(oz, dict(oz, burun="aquiline hooked nose"), burun=True)
     assert alanlar == {"burun"} and cizimler[0]["bolgeler"] == ["burun_genis"]
     assert "bump on the nose bridge" in cizimler[0]["pozitif"]
+
+
+def test_kemerli_burun_mu():
+    from fotorobot.ozellikler import kemerli_burun_mu
+    oz = {"burun": "straight medium nose"}
+    assert kemerli_burun_mu(oz, dict(oz, burun="aquiline hooked nose"))
+    assert not kemerli_burun_mu(oz, dict(oz, burun="wide flat nose"))
+    assert not kemerli_burun_mu({"burun": "aquiline nose"}, {"burun": "aquiline hooked nose"})
+
+
+def test_burun_kemerli_yalniz_burnu_degistirir():
+    import numpy as np
+    from PIL import Image
+    from fotorobot import rotus
+    g = Image.new("RGB", (512, 512), (200, 160, 140))
+    kps = [(200, 220), (312, 220), (256, 300), (215, 360), (297, 360)]
+    yeni, maske = rotus.burun_kemerli(g, kps, 1.8)
+    fark = np.abs(np.asarray(yeni, float) - np.asarray(g, float)).sum(-1)
+    assert fark[260:290, 240:272].max() > 5  # kemer
+    assert fark[:150].max() < 1 and fark[450:].max() < 1  # alın ve çene aynen

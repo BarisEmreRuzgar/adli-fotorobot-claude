@@ -318,6 +318,15 @@ BURUN_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawin
                   "makeup, dirt, mud, wound, blood, bruise, dark stain")
 
 
+KEMER_SOZCUKLERI = ("aquiline", "hooked", "roman")
+
+
+def kemerli_burun_mu(onceki, yeni):
+    """Burun kemerli/kartal burun olarak değişiyor mu (geometrik rötuşla yapılır: rotus.burun_kemerli)."""
+    b = (yeni.get("burun") or "").lower()
+    return b != (onceki.get("burun") or "").lower() and any(k in b for k in KEMER_SOZCUKLERI)         and not any(k in (onceki.get("burun") or "").lower() for k in KEMER_SOZCUKLERI)
+
+
 def yerel_cizimler(onceki, yeni, burun=False):
     """FaceID'siz bölgesel çizimle yapılacak değişiklikler.
 
