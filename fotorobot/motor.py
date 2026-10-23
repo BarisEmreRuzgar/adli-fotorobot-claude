@@ -33,6 +33,10 @@ BOLGE2_EN_AZ_DEGISIM = 0.9
 # Yerel çizim adayları: sakal rengi hedefe en yakın adaydan bu kadar (Lab) uzaktakiler eşit sayılır,
 # aralarından kimliği en yüksek seçilir (biyik_renk: beyaz adaylar 12-16, kahverengi/seyrek 27-33)
 ADAY_RENK_PAYI = 6.0
+# Bu uzaklığın altında aday yoksa (kahverengi/seyrek sakal) ek adaylar denenir
+ADAY_RENK_ESIGI = 22.0
+# Bundan yakın renk düz boya görünümüdür (sg3/sg5: 2.9-3.3 r1-2; doğal beyaz sakal 12-21)
+ADAY_RENK_EN_AZ = 8.0
 
 
 def _log(cb, mesaj):
@@ -647,13 +651,20 @@ class Motor:
         """`cizim` (ozellikler.yerel_cizimler öğesi) için `aday` kadar tohum dener ve seçer: sakal rengi
         hedefe en yakın olandan en çok ADAY_RENK_PAYI uzak olanlar arasından ilk yüze en benzeyen (ArcFace).
         Tek tohumda yerel sakalın 6 adayından 4'ü kahverengi/sarı çıkıyordu ve kimlik tohuma göre 0.49-0.69
-        oynuyordu. `koru`daki bölgeler kaynaktan geri konur."""
+        oynuyordu. Hiçbiri ADAY_RENK_ESIGI içinde değilse `aday` kadar daha (varsa `zor_pozitif`/`zor_negatif` ile) denenir (esmer yüzde 3 adayın
+        üçü de kahverengi kirli sakaldı, sg1). `koru`daki bölgeler kaynaktan geri konur."""
         from . import rotus
 
         renk = rotus.renk_bul(cizim.get("renk") or "")
-        adaylar = []
-        for k in range(max(1, int(cizim.get("aday", 1)))):
-            im = self.yerel_ciz(kaynak, cizim["bolgeler"], cizim["pozitif"], cizim["negatif"], adet=1,
+        adaylar, n = [], max(1, int(cizim.get("aday", 1)))
+        for k in range(2 * n if renk else n):
+            # İlk n adayın hiçbirinin rengi tutmadıysa bir n aday daha denenir
+            if k >= n and min(a[0] for a in adaylar) <= ADAY_RENK_ESIGI:
+                break
+            zor = k >= n  # ek adaylarda varsa daha sert prompt
+            im = self.yerel_ciz(kaynak, cizim["bolgeler"], cizim.get("zor_pozitif" if zor else "pozitif",
+                                                                     cizim["pozitif"]),
+                                cizim.get("zor_negatif" if zor else "negatif", cizim["negatif"]), adet=1,
                                 tohum=tohum + k * 7919, adim=adim, cfg=cizim["cfg"], guc=cizim["guc"],
                                 en_cok_koyulasma=cizim.get("en_cok_koyulasma"),
                                 kimlik_gucu=cizim.get("kimlik_gucu"))[0][0]
@@ -667,8 +678,10 @@ class Motor:
                     im, yuz.kps, rotus.ayristir(im), rotus.yalniz_biyik_mi(cizim.get("renk")))
                 fark = float("inf") if olc is None else rotus.renk_farki(olc, renk)
             adaylar.append((fark, kim or 0.0, im, kim))
-        en_yakin = min(a[0] for a in adaylar)
-        _, _, im, kim = max((a for a in adaylar if a[0] <= en_yakin + ADAY_RENK_PAYI), key=lambda a: a[1])
+        # Hedefe fazla yakın renk kıl gölgesi olmayan düz beyazdır (kâğıt/pamuk gibi; gerçekçilik 1-2)
+        dogal = [a for a in adaylar if a[0] >= ADAY_RENK_EN_AZ] or adaylar
+        en_yakin = min(a[0] for a in dogal)
+        _, _, im, kim = max((a for a in dogal if a[0] <= en_yakin + ADAY_RENK_PAYI), key=lambda a: a[1])
         return im, kim
 
     # ── Rötuş ──────────────────────────────────────────────────────────

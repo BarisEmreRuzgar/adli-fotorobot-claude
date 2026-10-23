@@ -305,6 +305,11 @@ YAS_ESIGI = 8  # bu kadar ve daha fazla yaşlandırmada yerel yaş çizimi
 SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
                   "clean shaven, smooth chin, woman, braid, braided beard, handlebar mustache, curled mustache, "
                   "costume, fake beard, viking, wizard, shaving foam, cotton")
+# Açık renk sakalın ek adaylarında (ilk adayların rengi tutmadığında; Motor.yerel_ciz_sec): esmer yüzde
+# 6 adayın 6'sı da koyu kirli sakal çıkıyordu (sg2)
+ACIK_SAKAL_RENKLERI = ("white", "grey", "gray", "silver", "blonde", "platinum")
+ACIK_SAKAL_ZOR_AGIRLIK = 1.2
+ACIK_SAKAL_ZOR_NEGATIFI = "(dark beard, brown beard, black beard:1.2)"
 YAS_NEGATIFI = "worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, makeup"
 # Burun: FaceID'li bölgesel düzenleme burnu hiç değiştirmiyordu (0/3, piksel farkı ~0). FaceID'siz, burun
 # kökünü de kapsayan maskeyle tam güçte deney ızgarasında 2/3, ama uçtan uca testte 0/3 ve kimlik
@@ -350,6 +355,10 @@ def yerel_cizimler(onceki, yeni, burun=False):
             "negatif": SAKAL_NEGATIFI, "guc": SAKAL_EKLEME_GUCU, "cfg": 6.5,
             "aday": YEREL_ADAY, "renk": yeni["sakal"], "koru": SAKAL_KORU,
         })
+        if any(r in s for r in ACIK_SAKAL_RENKLERI):
+            cizimler[-1]["zor_pozitif"] = (f"{agirlikli(yeni['sakal'] + ', natural facial hair', ACIK_SAKAL_ZOR_AGIRLIK)}"
+                                           ", photo, realistic")
+            cizimler[-1]["zor_negatif"] = f"{SAKAL_NEGATIFI}, {ACIK_SAKAL_ZOR_NEGATIFI}"
         alanlar.add("sakal")
     if int(yeni.get("yas", 0)) >= int(onceki.get("yas", 0)) + YAS_ESIGI:
         tarif = (f"{_kisi_ifadesi(yeni)}, deep forehead wrinkles, crow's feet, under-eye bags, "
