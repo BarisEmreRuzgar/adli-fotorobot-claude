@@ -186,6 +186,9 @@ def sakal_kilini_bul(lab, kps, harita, yalniz_biyik=False):
 
 # ── Boyama ───────────────────────────────────────────────────────────
 
+KIR_RENKLER = ("grey", "gray", "salt and pepper")
+
+
 def sac_boya(gorsel, harita, renk):
     """Saç piksellerini `renk`e boyar. Dönüş: (boyalı görsel, değişen bölge maskesi) ya da (None, None)."""
     lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
@@ -195,6 +198,10 @@ def sac_boya(gorsel, harita, renk):
         return None, None
     hedef = np.array(RENKLER[renk], dtype=np.float64)
     agirlik = _yumusat(maske.astype(np.float64), 1.5) * maske.max()
+    if renk in KIR_RENKLER:
+        # Kır saç düz gümüşe boyanınca peruk gibi görünüyordu (gerileme testi, "kısa kır saçlı"): yalnız
+        # ortancadan açık teller griye çekilir, koyular kalır → doğal karışık kır
+        agirlik = agirlik * _yumusat((lab[..., 0] > ort[0]).astype(np.float64), 1.0)
     # Koyu saçı açarken dokunun kontrastı da artmasın diye korunan oran azaltılır
     # Koyu saç açılırken doku çok azaltılınca düz "boya" gibi görünüyordu (Gemini gerçekçilik 2-3)
     yeni = _boya(lab, agirlik, ort, hedef, doku=0.7 if hedef[0] > ort[0] + 20 else 0.85)
