@@ -132,3 +132,7 @@ Reddedilenler (ölçümle):
 
 Düzeltme: kır saç düz gümüşe boyanınca peruk gibi duruyordu → yalnız ortancadan açık teller griye çekiliyor (karışık kır, r4/4).
 Açık: "kirli sakal" isteğinde keçi sakalı/bıyık çıkması; kaş yarasının bazen görünmemesi.
+
+### 2026-10-23 devam
+- **Kirli sakal**: "kirli sakal" isteğinde keçi sakalı/dolgun bıyık çıkıyordu → yalnız kirli sakalda keçi sakalı/dolgun bıyık negatifi + "görünür kısa, eşit kıl" ipucu (ağırlık 1.25). Esmer senaryosu 0/2 → 1/2, keçi sakalı 2/2 → 0/2, r4/4 (kalan başarısızlık kıvırcık saçın tutmaması).
+- **Kaş yarası**: kâkül alnı örtünce izin üst yarısı saçta kalıp çizilmiyordu ve kaş içindeki parça kaş+cilt ortancasıyla boyandığı için kayboluyordu → yol saçta kalan kısım ≤%20 olana dek aşağı (kaş + göz kapağı) kaydırılıyor, iz rengi yalnız cilt piksellerinden alınıyor (kaşta ten renkli boşluk). Rötuşla 1/2 → 2/2.

@@ -306,9 +306,30 @@ def yara_konumlari(ozel):
     return ", ".join(kalan), yaralar
 
 
-def yara_yolu(kps, yer, taraf=None):
+def _sacta_kalan(yol, harita):
+    h, w = harita.shape
+    return np.mean([harita[min(h - 1, max(0, int(y))), min(w - 1, max(0, int(x)))] == SINIF["hair"]
+                    for x, y in yol])
+
+
+def yara_yolu(kps, yer, taraf=None, harita=None):
     """Yara izinin görüntüdeki çizgisi [(x, y), ...]. taraf kişinin kendi sağı/solu
-    (kişinin solu görüntünün sağında); taraf yoksa kişinin solu."""
+    (kişinin solu görüntünün sağında); taraf yoksa kişinin solu.
+
+    Kaşta iz üstten alına uzanır; kâkül alnı örtüyorsa (harita) iz saçın altında kalıp
+    görünmüyordu (gerileme testi 1/2) → saçta kalan kısım azalana dek aşağı, göz kapağına kaydırılır."""
+    yol = _yara_yolu(kps, yer, taraf)
+    if harita is not None and yer == "kas":
+        d = _noktalar(kps)[-1]
+        ilk = yol
+        for adim in range(1, 10):  # en çok 0.45d (iz kaşı ve göz kapağını keser)
+            if _sacta_kalan(yol, harita) <= 0.2:
+                break
+            yol = [(x, y + 0.05 * d * adim) for x, y in ilk]
+    return yol
+
+
+def _yara_yolu(kps, yer, taraf=None):
     lx, ly, rx, ry, nx, ny, mlx, mly, mrx, mry, d = _noktalar(kps)
     sag = taraf == "sag"
     gx, gy = (lx, ly) if sag else (rx, ry)
@@ -369,7 +390,12 @@ def yara_ciz(gorsel, kps, yol, harita=None, tohum=0):
     # Kabarıklık: üst kenar ışık alır, alt kenar gölgede kalır (ışık yukarıdan)
     golge = np.roll(c, 2, axis=0) * (1 - c)
     isik = np.roll(c, -1, axis=0) * (1 - c)
-    yerel = np.median(lab[np.asarray(cekirdek.filter(ImageFilter.MaxFilter(15))) > 0], axis=0)
+    cevre = np.asarray(cekirdek.filter(ImageFilter.MaxFilter(15))) > 0
+    if harita is not None and (cevre & (harita == SINIF["skin"])).sum() > 20:
+        # Kaşı kesen iz kaşta ten renginde bir boşluk olarak görünür; kaş+cilt ortancası izi koyu
+        # kaşın içinde kaybettiriyordu (kâküllü yüz, gerileme testi)
+        cevre &= harita == SINIF["skin"]
+    yerel = np.median(lab[cevre], axis=0)
     yeni = lab.copy()
     doku = (lab[..., 0] - yerel[0]) * 0.35  # cilt gözenekleri hafifçe kalsın
     yeni[..., 0] = np.where(c > 0, yerel[0] + 9 + doku, lab[..., 0])

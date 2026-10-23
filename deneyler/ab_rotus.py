@@ -65,7 +65,7 @@ for anahtar in SECILI:
         _, yaralar = rotus.yara_konumlari(oz["ozel"])
         for yer, taraf in yaralar:
             b, m = rotus.yara_ciz(isler[-1][0] if isler else im, yuz.kps,
-                                  rotus.yara_yolu(yuz.kps, yer, taraf), harita, tohum=i)
+                                  rotus.yara_yolu(yuz.kps, yer, taraf, harita), harita, tohum=i)
             isler.append((b, m, f"{agirlikli('healed scar', 1.1)}, skin, photo"))
         if not isler:
             print("SONUC", anahtar, i, "rötuş gerekmedi", flush=True)

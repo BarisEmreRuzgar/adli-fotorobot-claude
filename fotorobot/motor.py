@@ -689,7 +689,7 @@ class Motor:
                         gorsel = rotus.renk_kilitle(gorsel, maske, sakal_renk)
                         yapilan.append(f"{'bıyık' if biyik else 'sakal'} rengi → {sakal_renk}")
         for i, (yer, taraf) in enumerate(yaralar):
-            yol = rotus.yara_yolu(yuz.kps, yer, taraf)
+            yol = rotus.yara_yolu(yuz.kps, yer, taraf, harita)
             cizili, maske = rotus.yara_ciz(gorsel, yuz.kps, yol, harita, tohum=tohum + i)
             gorsel = self._incelt(cizili, maske, f"{agirlikli('healed scar', 1.1)}, skin, photo",
                                   rotus.YARA_INCELTME, tohum + i, adim)
