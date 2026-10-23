@@ -296,6 +296,9 @@ SAKAL_EKLEME_GUCU = 0.95
 # Yaşlandırmada kullanılmaz: kimliğe göre seçim en az yaşlananı seçiyordu (3/3 → 2/3)
 YEREL_ADAY = 3
 YAS_GUCU = 0.55
+# Yaşlandırmada düşük güçlü FaceID (deney yf1/yf2: kapalı id 0.71; 0.45 → 0.73-0.75, yaşlanma korunuyor;
+# 0.5 uçtan uca 0/3, 0.6+ → 0.78-0.81 ama yaşlanma kayboluyor)
+YAS_KIMLIK_GUCU = 0.45
 YAS_ESIGI = 8  # bu kadar ve daha fazla yaşlandırmada yerel yaş çizimi
 SAKAL_NEGATIFI = ("worst quality, low quality, blurry, cartoon, painting, drawing, 3d render, deformed, "
                   "clean shaven, smooth chin, woman, braid, braided beard, handlebar mustache, curled mustache, "
@@ -352,7 +355,7 @@ def yerel_cizimler(onceki, yeni, burun=False):
         cizimler.append({
             "ad": "yaşlanma", "bolgeler": ["yas"],
             "pozitif": f"{agirlikli(tarif, 1.2)}, photo, realistic, natural skin texture",
-            "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0,
+            "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0, "kimlik_gucu": YAS_KIMLIK_GUCU,
         })
         alanlar.add("yas")
     if burun and yeni.get("burun") and yeni.get("burun") != onceki.get("burun"):

@@ -478,7 +478,7 @@ class Motor:
 
     def kimlik_koruyarak_uret(self, kaynak, pozitif, negatif, adet=3, tohum=-1, adim=30,
                               cfg=6.0, kimlik_gucu=0.6, degisim=0.8, kimlik_gorseli=None,
-                              sac_maskele=False, bolgeler=None, ilerleme=None):
+                              sac_maskele=False, bolgeler=None, ilerleme=None, en_az_degisim=None):
         """Kaynak yüzün kimliğini koruyarak yeni prompt ile üretir.
 
         `degisim` 1.0'a yakınsa sıfırdan (txt2img) üretilir; daha düşük değerlerde
@@ -534,7 +534,7 @@ class Motor:
             with torch.inference_mode():
                 if maske is not None:
                     # Bölge içinde (neredeyse) sıfırdan çizim; dışı kaynakla aynı kalır
-                    guc = max(float(degisim), BOLGE2_EN_AZ_DEGISIM)
+                    guc = max(float(degisim), BOLGE2_EN_AZ_DEGISIM if en_az_degisim is None else en_az_degisim)
                     cikti = self.pipe_inp(image=baslangic, mask_image=maske, strength=guc,
                                           width=g, height=y,
                                           num_inference_steps=max(adim, int(round(adim / guc))),
@@ -598,10 +598,13 @@ class Motor:
         return sonuclar
 
     def yerel_ciz(self, kaynak, bolgeler, pozitif, negatif, adet=1, tohum=-1, adim=25, cfg=6.5, guc=0.95,
-                  en_cok_koyulasma=None, deneme=3, ilerleme=None):
+                  en_cok_koyulasma=None, deneme=3, ilerleme=None, kimlik_gucu=None):
         """FaceID kapalıyken yalnızca verilen yüz bölgelerini (yuz_bolge_maskesi) yeniden çizer.
         FaceID kaynağın sakalsız/genç yüzünü ve burnunu geri çektiği için sakal ekleme, yaşlandırma ve
         burun böyle yapılır.
+
+        `kimlik_gucu` verilirse FaceID tamamen kapatılmaz, bu güçle bölgesel inpainting yapılır (yaşlandırma:
+        FaceID'siz kimlik 0.71, 0.45'te 0.73-0.75 ve yaşlanma korunuyor; 0.6+ yaşlanmayı siliyor).
 
         `en_cok_koyulasma`: bölgenin ortalama parlaklığı (L*) bundan fazla düşerse sonuç bozuk sayılır
         (burunda 9 denemenin 2'sinde kahverengi leke çıktı) ve başka tohumla `deneme` kez yeniden çizilir;
@@ -613,6 +616,10 @@ class Motor:
         yuz = self.yuz_bul(kaynak)
         if yuz is None:
             raise ValueError("Yüz bulunamadı; bölgesel çizim yapılamadı.")
+        if kimlik_gucu is not None:
+            return [s for s in self.kimlik_koruyarak_uret(
+                kaynak, pozitif, negatif, adet=adet, tohum=tohum, adim=adim, cfg=cfg, kimlik_gucu=kimlik_gucu,
+                degisim=guc, bolgeler=bolgeler, ilerleme=ilerleme, en_az_degisim=0.0)[0]]
         maske = yuz_bolge_maskesi(yuz.kps, yuz.bbox, kaynak.size, bolgeler)
         if en_cok_koyulasma is None:
             return self.bolge_duzenle(kaynak, maske, pozitif, negatif, adet=adet, tohum=tohum, adim=adim,
@@ -644,7 +651,8 @@ class Motor:
         for k in range(max(1, int(cizim.get("aday", 1)))):
             im = self.yerel_ciz(kaynak, cizim["bolgeler"], cizim["pozitif"], cizim["negatif"], adet=1,
                                 tohum=tohum + k * 7919, adim=adim, cfg=cizim["cfg"], guc=cizim["guc"],
-                                en_cok_koyulasma=cizim.get("en_cok_koyulasma"))[0][0]
+                                en_cok_koyulasma=cizim.get("en_cok_koyulasma"),
+                                kimlik_gucu=cizim.get("kimlik_gucu"))[0][0]
             kim = self.kimlik_benzerligi(None, im, yuz_a=kimlik_yuzu) if kimlik_yuzu is not None else None
             uyumlu = True
             if renk:
