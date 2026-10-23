@@ -43,9 +43,12 @@ if __name__ == "__main__":
         biyik = rotus.sakal_bolgesi(yz.kps, im.size, harita, yalniz_biyik=True) > 0.5
         cene = (rotus.sakal_bolgesi(yz.kps, im.size, harita) > 0.5) & ~biyik
         b, c = rotus._ortanca(lab, biyik), rotus._ortanca(lab, cene)
+        cilt = rotus.yanak_cildi(lab, yz.kps, harita)
+        kil = rotus._ortanca(lab, biyik & (lab[..., 0] > cilt[0] + 4)) if cilt is not None else None
+        kil = kil if kil is not None else [0, 0, 0]
         olc = rotus.sakal_rengi_olc(im, yz.kps, harita)
         sat.append(im)
-        et.append(f"{k} id{kim:.2f} biyik L{b[0]:.0f} b{b[2]:.0f} cene L{c[0]:.0f} b{c[2]:.0f}")
+        et.append(f"{k} id{kim:.2f} kil L{kil[0]:.0f} b{kil[2]:.0f} cene L{c[0]:.0f} b{c[2]:.0f}")
         print("ADAY", et[-1], "olc", None if olc is None else np.round(olc).tolist(), flush=True)
     izgara([sat[:3], sat[3:]], [et[:3], et[3:]], (260, 260)).save(os.path.join(KOK, "deneyler", "sonuc", "biyik_renk.png"))
     print("SONUC bitti", flush=True)
