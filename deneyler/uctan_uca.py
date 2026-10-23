@@ -43,7 +43,16 @@ def bos_ilerleme(*a, **k):
 
 
 def denetim(im, iddialar):
-    v = denetle(im, iddialar)
+    """OYLAMA ortam değişkeni (varsayılan 1) kadar yargı alır: her iddia çoğunlukla, gerçekçilik ortanca.
+    Aynı görsele Gemini bazen farklı karar veriyordu (yara uu5 4/4, uu27 aynı görseller 0/2)."""
+    oylar = [denetle(im, iddialar) for _ in range(int(os.environ.get("OYLAMA", 1)))]
+    gecerli = [o for o in oylar if len(o["kontroller"]) == len(iddialar)] or oylar[:1]
+    v = dict(gecerli[0])
+    if len(gecerli) > 1:
+        v["kontroller"] = [sum(o["kontroller"][i] for o in gecerli) * 2 > len(gecerli) for i in range(len(iddialar))]
+        puanlar = sorted(o["gercekcilik"] for o in gecerli if o.get("gercekcilik") is not None)
+        v["gercekcilik"] = puanlar[len(puanlar) // 2] if puanlar else None
+        v["oylar"] = [o["kontroller"] for o in gecerli]
     ok = bool(v["kontroller"]) and len(v["kontroller"]) == len(iddialar) and all(v["kontroller"])
     return ok, v
 
