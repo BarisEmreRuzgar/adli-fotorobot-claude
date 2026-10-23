@@ -297,6 +297,9 @@ SAKAL_EKLEME_GUCU = 0.95
 YEREL_ADAY = 3
 # Sakal çizimi burnu da değiştiriyordu; kaynağın burnu geri konunca kimlik 0.66-0.67 → 0.75 (sakal_analiz)
 SAKAL_KORU = ("nose",)
+# Tam sakalda dudaklar da (sert prompt'lu ek aday dudağı yeniden çiziyordu: esmer yüzde 0.53 → 0.63);
+# yalnız bıyıkta değil, bıyık üst dudağa taşar
+SAKAL_DUDAK_KORU = ("u_lip", "l_lip", "mouth")
 YAS_GUCU = 0.55
 # Alın maskesi saç çizgisine değdiği için orada koyu kırmızı leke çıkıyordu (uu22); saç kaynaktan geri konur
 YAS_KORU = ("hair",)
@@ -355,7 +358,7 @@ def yerel_cizimler(onceki, yeni, burun=False):
             "bolgeler": ["biyik"] if yalniz_biyik else ["alt_yuz"],
             "pozitif": f"{agirlikli(yeni['sakal'] + ', natural facial hair', 1.1)}, photo, realistic",
             "negatif": SAKAL_NEGATIFI, "guc": SAKAL_EKLEME_GUCU, "cfg": 6.5,
-            "aday": YEREL_ADAY, "renk": yeni["sakal"], "koru": SAKAL_KORU,
+            "aday": YEREL_ADAY, "renk": yeni["sakal"], "koru": SAKAL_KORU + (() if yalniz_biyik else SAKAL_DUDAK_KORU),
         })
         if any(r in s for r in ACIK_SAKAL_RENKLERI):
             cizimler[-1]["zor_pozitif"] = (f"{agirlikli(yeni['sakal'] + ', natural facial hair', ACIK_SAKAL_ZOR_AGIRLIK)}"
