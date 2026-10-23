@@ -295,6 +295,8 @@ SAKAL_EKLEME_GUCU = 0.95
 # Sakal eklemede denenecek tohum sayısı (renk + kimliğe göre en iyisi seçilir; Motor.yerel_ciz_sec).
 # Yaşlandırmada kullanılmaz: kimliğe göre seçim en az yaşlananı seçiyordu (3/3 → 2/3)
 YEREL_ADAY = 3
+# Sakal çizimi burnu da değiştiriyordu; kaynağın burnu geri konunca kimlik 0.66-0.67 → 0.75 (sakal_analiz)
+SAKAL_KORU = ("nose",)
 YAS_GUCU = 0.55
 # Yaşlandırmada düşük güçlü FaceID (deney yf1/yf2: kapalı id 0.71; 0.45 → 0.73-0.75, yaşlanma korunuyor;
 # 0.5 uçtan uca 0/3, 0.6+ → 0.78-0.81 ama yaşlanma kayboluyor)
@@ -346,7 +348,7 @@ def yerel_cizimler(onceki, yeni, burun=False):
             "bolgeler": ["biyik"] if yalniz_biyik else ["alt_yuz"],
             "pozitif": f"{agirlikli(yeni['sakal'] + ', natural facial hair', 1.1)}, photo, realistic",
             "negatif": SAKAL_NEGATIFI, "guc": SAKAL_EKLEME_GUCU, "cfg": 6.5,
-            "aday": YEREL_ADAY, "renk": yeni["sakal"],
+            "aday": YEREL_ADAY, "renk": yeni["sakal"], "koru": SAKAL_KORU,
         })
         alanlar.add("sakal")
     if int(yeni.get("yas", 0)) >= int(onceki.get("yas", 0)) + YAS_ESIGI:

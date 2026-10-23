@@ -31,7 +31,8 @@ if __name__ == "__main__":
     _, liste, _, _ = app.uret(oz_tablo(oz), TEMEL, None, 1, 25, 6.0, TOHUM1, progress=bos_ilerleme)
     kaynak = Image.open(liste[0]["yol"]).convert("RGB")
     yuz = mo.yuz_bul(kaynak)
-    yeni_oz, _ = gem.degisiklik(liste[0]["oz"], "15 yaş yaşlandır")
+    komut = os.environ.get("KOMUT", "15 yaş yaşlandır")
+    yeni_oz, _ = gem.degisiklik(liste[0]["oz"], komut)
     y = yerel_cizimler(liste[0]["oz"], yeni_oz)[0][0]
     motor_mod.BOLGE2_EN_AZ_DEGISIM = 0.0  # yerel çizimle aynı güç kullanılsın
     satirlar, etiketler = [], []
@@ -47,7 +48,7 @@ if __name__ == "__main__":
             adaylar.append((f"B fid{kg}", im))
         for vad, im in adaylar:
             kim = mo.kimlik_benzerligi(None, im, yuz_a=yuz) or 0
-            ok, v = denetim(im, IDDIA2["15 yaş yaşlandır"])
+            ok, v = denetim(im, IDDIA2[komut])
             sat.append(im)
             et.append(f"{vad} {'OK' if ok else 'X'} id{kim:.2f} r{v.get('gercekcilik')}")
             print("PUAN", k, et[-1], flush=True)

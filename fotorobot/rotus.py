@@ -127,6 +127,15 @@ def _yumusat(maske, yaricap):
     return np.asarray(im.filter(ImageFilter.GaussianBlur(yaricap)), dtype=np.float64) / 255
 
 
+def bolge_geri_koy(gorsel, kaynak, siniflar):
+    """`siniflar`daki yüz bölgelerini (iki görselin ayrıştırma haritalarının birleşimi) kaynaktan geri koyar."""
+    sn = [SINIF[s] for s in siniflar]
+    maske = np.isin(ayristir(gorsel), sn) | np.isin(ayristir(kaynak), sn)
+    m = _yumusat(maske.astype(np.float64), 2.0)[..., None]
+    a, b = np.asarray(gorsel.convert("RGB"), np.float64), np.asarray(kaynak.convert("RGB"), np.float64)
+    return Image.fromarray((a * (1 - m) + b * m).round().astype(np.uint8))
+
+
 # ── Bölgeler ─────────────────────────────────────────────────────────
 
 def _noktalar(kps):

@@ -642,7 +642,7 @@ class Motor:
 
     def yerel_ciz_sec(self, kaynak, cizim, tohum, adim, kimlik_yuzu=None):
         """`cizim` (ozellikler.yerel_cizimler öğesi) için `aday` kadar tohum dener ve seçer: önce sakal
-        rengi istenen ailede olanlar, sonra ilk yüze en benzeyen (ArcFace). Tek tohumda yerel sakalın
+        rengi istenen ailede olanlar, sonra ilk yüze en benzeyen (ArcFace). `koru`daki bölgeler kaynaktan geri konur. Tek tohumda yerel sakalın
         6 adayından 4'ü kahverengi/sarı çıkıyordu ve kimlik tohuma göre 0.49-0.69 oynuyordu."""
         from . import rotus
 
@@ -653,6 +653,8 @@ class Motor:
                                 tohum=tohum + k * 7919, adim=adim, cfg=cizim["cfg"], guc=cizim["guc"],
                                 en_cok_koyulasma=cizim.get("en_cok_koyulasma"),
                                 kimlik_gucu=cizim.get("kimlik_gucu"))[0][0]
+            if cizim.get("koru"):
+                im = rotus.bolge_geri_koy(im, kaynak, cizim["koru"])
             kim = self.kimlik_benzerligi(None, im, yuz_a=kimlik_yuzu) if kimlik_yuzu is not None else None
             uyumlu = True
             if renk:

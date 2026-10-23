@@ -78,7 +78,7 @@ def asama2(app, ad):
     rapor, satirlar, etiketler = {}, [], []
     secili = [k for k in os.environ.get("KOMUT", "").split(",") if k]
     for komut in [k for k in DEGISIKLIKLER if not secili or k in secili]:
-        _, liste2, metin, _ = app.duzenle(kaynak, kaynak, oz_tablo(oz), komut, vaka, [], 0.6, 0.8, 3, 25, 6.0,
+        _, liste2, metin, _ = app.duzenle(kaynak, kaynak, oz_tablo(oz), komut, vaka, [], 0.6, 0.8, int(os.environ.get("ADET", 3)), 25, 6.0,
                                           2026, progress=bos_ilerleme)
         print("RAPOR", komut, " | ".join(s for s in metin.splitlines() if s.startswith(("🎨", "ℹ️ Yalnız", "❌"))),
               flush=True)
