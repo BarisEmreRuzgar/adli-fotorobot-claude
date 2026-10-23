@@ -158,7 +158,15 @@ SAC_IPUCLARI = {
     "long": ("long hair falling past the shoulders to the chest", "short hair, bob cut, shoulder length hair"),
 }
 SAC_IPUCU_AGIRLIGI = 1.2
+# Yalnız bıyık (ör. "pala bıyık" → thick mustache) kıvrık uçlu, çizilmiş gibi handlebar çıkıyordu (uu27/uu28 r2)
+BIYIK_IPUCU = "bushy natural mustache"
+BIYIK_NEGATIFI = "handlebar mustache, curled mustache tips, waxed mustache"
 KIRLI_SAKAL_NEGATIFI = "goatee, full beard, long beard, thick mustache, handlebar mustache"
+
+
+def _yalniz_biyik_mi(sakal):
+    s = (sakal or "").lower()
+    return ("mustache" in s or "moustache" in s) and not any(k in s for k in ("beard", "goatee", "stubble"))
 
 
 def _sakal_var_mi(sakal):
@@ -448,6 +456,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
     if not kadin:
         if _yalniz_kirli_sakal_mi(oz["sakal"]):
             blok2.append(agirlikli(f"{oz['sakal']}, {KIRLI_SAKAL_IPUCU}", 1.25))
+        elif _yalniz_biyik_mi(oz["sakal"]):
+            blok2.append(agirlikli(f"{oz['sakal']}, {BIYIK_IPUCU}", 1.2))
         else:
             blok2.append(oz["sakal"] or "clean shaven")
     blok2 += [oz["goz"], oz["kas"], oz["burun"], oz["dudak"], oz["cene"]]
@@ -494,6 +504,8 @@ def prompt_olustur(oz, onceki=None, referans=None):
             negatif.append("beard, mustache, stubble, goatee")
         elif _yalniz_kirli_sakal_mi(oz["sakal"]):
             negatif.append(KIRLI_SAKAL_NEGATIFI)
+        elif _yalniz_biyik_mi(oz["sakal"]):
+            negatif.append(BIYIK_NEGATIFI)
     negatif += [n for _, n in _sac_ipuclari(oz["sac"])]
     aksesuar = oz["aksesuar"] + " " + oz["ozel"]
     if not _iceriyor(aksesuar, "glasses", "spectacles", "eyewear", "sunglasses"):

@@ -172,3 +172,5 @@ Açık: "kirli sakal" isteğinde keçi sakalı/bıyık çıkması; kaş yarasın
 ### Güncel durum (2026-10-24, çoğunluk oylamalı denetim `OYLAMA=3`)
 - **Aşama 1** (uu28, 2 görsel/senaryo): beyaz sakal 2/2, sarı kısa 2/2, yara 2/2, pala 2/2 → **8/8**; gerçekçilik 4,2 / 3,4 / 4,4 / 2,3.
 - **Aşama 2** (uu29): sarı saç 0.82, beyaz sakal 0.79, kemerli burun 0.79, yaşlandırma 0.79, yanak yarası 0.99 → **5/5, kimlik ≥ 0.79, r4/4/4/4/4**.
+- **Pala bıyık prompt'u**: "thick mustache" kıvrık uçlu, çizilmiş gibi handlebar çıkıyordu (uu27/uu28). Yalnız bıyıkta "bushy natural mustache" ipucu (1.2) + "handlebar/curled tips/waxed" negatifi (ağırlıksız; 1.3 bıyığı tamamen siliyordu). Ham görseller gür, doğal bıyık (r4/4); uçtan uca pala 4 görsel **4/4** (uu30), ama beyaza boyanan kalın bıyık pamuk gibi (r2,2,2,4).
+- Reddedilen (beyaz bıyık pamuk görünümü): bıyık inceltme gücü 0.75/0.85 (r2, iddia düşüyor); bıyığı yerel çizimle yeniden çizmek (koyu kalıyor ya da takma bıyık gibi nesne, 0/2).

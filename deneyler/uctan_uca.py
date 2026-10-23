@@ -59,7 +59,8 @@ def denetim(im, iddialar):
 
 def asama1(app, ad):
     rapor, satirlar, etiketler = {}, [], []
-    for anahtar, ifade in SENARYOLAR.items():
+    secili = [k for k in os.environ.get("SENARYO", "").split(",") if k]
+    for anahtar, ifade in [(k, v) for k, v in SENARYOLAR.items() if not secili or k in secili]:
         oz = oz_cikar(ifade)
         _, liste, metin, _ = app.uret(oz_tablo(oz), ifade, None, int(os.environ.get("ADET", 4)), 25, 6.0, 4242,
                                        progress=bos_ilerleme)
