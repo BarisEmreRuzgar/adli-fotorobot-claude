@@ -291,6 +291,17 @@ def sakal_rengi_olc(gorsel, kps, harita, yalniz_biyik=False):
     return None if agirlik is None else _ortanca(lab, agirlik > 0.3)
 
 
+def sakal_bolge_rengi(gorsel, kps, harita, yalniz_biyik=False):
+    """Sakal bölgesinin (tam sakalda bıyık hariç, çoğunu kıl kapladığı için) ortanca Lab rengi.
+    Kıl ağırlığı (sakal_kilini_bul) yalnızca koyu pikselleri sayıyor; beyaz ve kahverengi sakal
+    adaylarında aynı rengi veriyordu (biyik_renk: [57,13,18] / [40,13,17]), bölge ortancası ayırıyor."""
+    lab = rgb_lab(np.asarray(gorsel.convert("RGB")))
+    bolge = sakal_bolgesi(kps, harita.shape[::-1], harita, yalniz_biyik) > 0.5
+    if not yalniz_biyik:
+        bolge &= ~(sakal_bolgesi(kps, harita.shape[::-1], harita, True) > 0.5)
+    return _ortanca(lab, bolge)
+
+
 def renk_farki(olculen, renk):
     return float(np.linalg.norm(np.asarray(olculen) - np.asarray(RENKLER[renk])))
 

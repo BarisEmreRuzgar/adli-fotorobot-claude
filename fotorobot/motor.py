@@ -30,6 +30,9 @@ BOLGE_BULANIKLIGI = 4
 # Aşama 2 bölgesel düzenleme: maske kenar yumuşatması ve bölge içindeki en düşük değişim
 BOLGE2_BULANIKLIGI = 12
 BOLGE2_EN_AZ_DEGISIM = 0.9
+# Yerel çizim adayları: sakal rengi hedefe en yakın adaydan bu kadar (Lab) uzaktakiler eşit sayılır,
+# aralarından kimliği en yüksek seçilir (biyik_renk: beyaz adaylar 12-16, kahverengi/seyrek 27-33)
+ADAY_RENK_PAYI = 6.0
 
 
 def _log(cb, mesaj):
@@ -641,13 +644,14 @@ class Motor:
         return sonuclar
 
     def yerel_ciz_sec(self, kaynak, cizim, tohum, adim, kimlik_yuzu=None):
-        """`cizim` (ozellikler.yerel_cizimler öğesi) için `aday` kadar tohum dener ve seçer: önce sakal
-        rengi istenen ailede olanlar, sonra ilk yüze en benzeyen (ArcFace). `koru`daki bölgeler kaynaktan geri konur. Tek tohumda yerel sakalın
-        6 adayından 4'ü kahverengi/sarı çıkıyordu ve kimlik tohuma göre 0.49-0.69 oynuyordu."""
+        """`cizim` (ozellikler.yerel_cizimler öğesi) için `aday` kadar tohum dener ve seçer: sakal rengi
+        hedefe en yakın olandan en çok ADAY_RENK_PAYI uzak olanlar arasından ilk yüze en benzeyen (ArcFace).
+        Tek tohumda yerel sakalın 6 adayından 4'ü kahverengi/sarı çıkıyordu ve kimlik tohuma göre 0.49-0.69
+        oynuyordu. `koru`daki bölgeler kaynaktan geri konur."""
         from . import rotus
 
         renk = rotus.renk_bul(cizim.get("renk") or "")
-        en_iyi = None
+        adaylar = []
         for k in range(max(1, int(cizim.get("aday", 1)))):
             im = self.yerel_ciz(kaynak, cizim["bolgeler"], cizim["pozitif"], cizim["negatif"], adet=1,
                                 tohum=tohum + k * 7919, adim=adim, cfg=cizim["cfg"], guc=cizim["guc"],
@@ -656,16 +660,16 @@ class Motor:
             if cizim.get("koru"):
                 im = rotus.bolge_geri_koy(im, kaynak, cizim["koru"])
             kim = self.kimlik_benzerligi(None, im, yuz_a=kimlik_yuzu) if kimlik_yuzu is not None else None
-            uyumlu = True
+            fark = 0.0
             if renk:
                 yuz = self.yuz_bul(im)
-                olc = None if yuz is None else rotus.sakal_rengi_olc(
+                olc = None if yuz is None else rotus.sakal_bolge_rengi(
                     im, yuz.kps, rotus.ayristir(im), rotus.yalniz_biyik_mi(cizim.get("renk")))
-                uyumlu = olc is not None and rotus.renk_uyumlu(olc, renk)
-            puan = (uyumlu, kim or 0.0)
-            if en_iyi is None or puan > en_iyi[0]:
-                en_iyi = (puan, im, kim)
-        return en_iyi[1], en_iyi[2]
+                fark = float("inf") if olc is None else rotus.renk_farki(olc, renk)
+            adaylar.append((fark, kim or 0.0, im, kim))
+        en_yakin = min(a[0] for a in adaylar)
+        _, _, im, kim = max((a for a in adaylar if a[0] <= en_yakin + ADAY_RENK_PAYI), key=lambda a: a[1])
+        return im, kim
 
     # ── Rötuş ──────────────────────────────────────────────────────────
 
