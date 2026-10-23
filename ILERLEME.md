@@ -166,3 +166,5 @@ Açık: "kirli sakal" isteğinde keçi sakalı/bıyık çıkması; kaş yarasın
 | Kaşta yara | 0/2 | 2/2 |
 | **Toplam** | **7/14** | **13/14**, gerçekçilik 3-5 |
 (2026-10-23: 4/10 → 6/10, 5 senaryo.)
+- **Aşama 1 uçtan uca (uu27, 2 görsel)**: beyaz sakal 1/2, sarı kısa 2/2, yara 0/2, pala 2/2. Yara görselleri uu5 ile birebir aynı (orada 4/4) → Gemini oynaklığı; beyaz sakal/pala görselleri uu5'ten doğal (kıvrık kostüm bıyığı yok). Kalan kusur: beyaz sakal boyamasında seyrek koyu yanak kılları düz gri yama/şerit oluyor (bir görselde r2).
+- Reddedilen (o gri yama için, `deneyler/ab_sakal_rotus.py`, `ab_sakal_ciz.py`): kıl tespitine yerel doku şartı (yamayı azaltıyor, gür sakalda siyah delikler açıyor); sakal bölgesinin yan üst sınırını aşağı çekmek (yama sınırda değil, etki yok); seyrek kılı boyamama/yoğunluk şartı (kenarlar kararıyor, r2); boyamak yerine Aşama 2 yerel çizimiyle sakalı yeniden çizmek (korunan dudak eski koyu bıyığı geri getiriyor, yeni bıyık kızıl; 0/2).

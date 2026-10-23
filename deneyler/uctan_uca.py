@@ -52,7 +52,8 @@ def asama1(app, ad):
     rapor, satirlar, etiketler = {}, [], []
     for anahtar, ifade in SENARYOLAR.items():
         oz = oz_cikar(ifade)
-        _, liste, metin, _ = app.uret(oz_tablo(oz), ifade, None, 4, 25, 6.0, 4242, progress=bos_ilerleme)
+        _, liste, metin, _ = app.uret(oz_tablo(oz), ifade, None, int(os.environ.get("ADET", 4)), 25, 6.0, 4242,
+                                       progress=bos_ilerleme)
         print("RAPOR", anahtar, " | ".join(s for s in metin.splitlines() if s.startswith(("🎨", "🖌", "❌"))),
               flush=True)
         sat, et, sonuc = [], [], []
