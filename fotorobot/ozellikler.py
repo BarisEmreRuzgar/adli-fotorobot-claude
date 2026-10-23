@@ -298,6 +298,8 @@ YEREL_ADAY = 3
 # Sakal çizimi burnu da değiştiriyordu; kaynağın burnu geri konunca kimlik 0.66-0.67 → 0.75 (sakal_analiz)
 SAKAL_KORU = ("nose",)
 YAS_GUCU = 0.55
+# Alın maskesi saç çizgisine değdiği için orada koyu kırmızı leke çıkıyordu (uu22); saç kaynaktan geri konur
+YAS_KORU = ("hair",)
 # Yaşlandırmada düşük güçlü FaceID (deney yf1/yf2: kapalı id 0.71; 0.45 → 0.73-0.75, yaşlanma korunuyor;
 # 0.5 uçtan uca 0/3, 0.6+ → 0.78-0.81 ama yaşlanma kayboluyor)
 YAS_KIMLIK_GUCU = 0.45
@@ -367,6 +369,7 @@ def yerel_cizimler(onceki, yeni, burun=False):
             "ad": "yaşlanma", "bolgeler": ["yas"],
             "pozitif": f"{agirlikli(tarif, 1.2)}, photo, realistic, natural skin texture",
             "negatif": YAS_NEGATIFI, "guc": YAS_GUCU, "cfg": 7.0, "kimlik_gucu": YAS_KIMLIK_GUCU,
+            "koru": YAS_KORU,
         })
         alanlar.add("yas")
     if burun and yeni.get("burun") and yeni.get("burun") != onceki.get("burun"):

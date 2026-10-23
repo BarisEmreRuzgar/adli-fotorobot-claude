@@ -16,6 +16,7 @@ from uctan_uca import IDDIA2, bos_ilerleme, denetim  # noqa: E402
 
 from fotorobot.arayuz import Uygulama, oz_tablo  # noqa: E402
 from fotorobot.gemini import Gemini  # noqa: E402
+from fotorobot import ozellikler  # noqa: E402
 
 TARIFLER = [
     "45 yaşında esmer tenli bir erkek, kısa kıvırcık siyah saçlı.",
@@ -30,6 +31,8 @@ if __name__ == "__main__":
     ad = sys.argv[1]
     secili = [TARIFLER[int(i)] for i in sys.argv[2:]] or TARIFLER
     komut = os.environ.get("KOMUT", "beyaz sakal ekle")
+    if os.environ.get("GUC"):  # sakal çizim gücü deneyi
+        ozellikler.SAKAL_EKLEME_GUCU = float(os.environ["GUC"])
     mo = Motor()
     mo.yukle()
     app = Uygulama(mo, gemini=Gemini("", mo.ayarlar.gemini_modelleri))

@@ -87,6 +87,7 @@ def asama2(app, ad):
             im = Image.open(x["yol"]).convert("RGB")
             ok, v = denetim(im, IDDIA2[komut])
             sonuc.append({"ok": ok, "kimlik": x.get("benzerlik"), "v": v})
+            print("NOT", komut, v.get("model"), v.get("kontroller"), (v.get("not") or "")[:140], flush=True)
             sat.append(im)
             et.append(f"{'OK' if ok else 'X'} id{x.get('benzerlik') or 0:.2f} r{v.get('gercekcilik')}")
         rapor[komut] = sonuc

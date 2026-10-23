@@ -23,6 +23,7 @@ from fotorobot.gemini import Gemini  # noqa: E402
 BOLGELER = {
     "goz_kas": ("l_eye", "r_eye", "l_brow", "r_brow"),
     "burun": ("nose",),
+    "kulak_sac": ("l_ear", "r_ear", "hair"),
     "dudak": ("u_lip", "l_lip", "mouth"),
 }
 
@@ -39,8 +40,9 @@ if __name__ == "__main__":
     mo = Motor()
     mo.yukle()
     app = Uygulama(mo, gemini=Gemini("", mo.ayarlar.gemini_modelleri))
-    oz = oz_cikar(TEMEL)
-    _, liste, _, vaka = app.uret(oz_tablo(oz), TEMEL, None, 1, 25, 6.0, 4242, progress=bos_ilerleme)
+    tarif = os.environ.get("TARIF", TEMEL)
+    oz = oz_cikar(tarif)
+    _, liste, _, vaka = app.uret(oz_tablo(oz), tarif, None, 1, 25, 6.0, 4242, progress=bos_ilerleme)
     kaynak = Image.open(liste[0]["yol"]).convert("RGB")
     yuz = mo.yuz_bul(kaynak)
     hk = rotus.ayristir(kaynak)
